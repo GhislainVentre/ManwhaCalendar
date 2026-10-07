@@ -65,7 +65,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (q.isEmpty()) return
         val sources = repository.searchSources()
         if (sources.isEmpty()) {
-            message = "Aucun site activé (menu ⋮ → Sites de recherche)"
+            message = "Aucun site activé (Réglages → Sites de recherche)"
             return
         }
         searchJob?.cancel()

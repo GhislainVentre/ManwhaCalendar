@@ -4,60 +4,28 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,37 +34,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
-import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
-import com.ghislainventre.manhwacalendar.data.MangaSummary
-import com.ghislainventre.manhwacalendar.data.Source
-import java.time.Duration
-import java.time.Instant
-import java.time.LocalDate
 
-private enum class Tab(val label: String) { CALENDAR("Calendrier"), SERIES("Mes séries"), SEARCH("Rechercher") }
+private enum class Tab(val label: String, val icon: ImageVector) {
+    AGENDA("Agenda", Icons.Default.DateRange),
+    LIBRARY("Mes séries", Icons.Default.Favorite),
+    SEARCH("Rechercher", Icons.Default.Search),
+}
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
     val followed by vm.followed.collectAsState()
-    val language by vm.language.collectAsState()
-    var tab by rememberSaveable { mutableStateOf(Tab.CALENDAR) }
+    val sites by vm.sites.collectAsState()
+    var tab by rememberSaveable { mutableStateOf(Tab.AGENDA) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
-    var showSites by rememberSaveable { mutableStateOf(false) }
-    if (showSites) SitesDialog(vm) { showSites = false }
     val context = LocalContext.current
 
     LaunchedEffect(vm.message) {
@@ -106,453 +63,80 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
         }
     }
 
+    if (showSettings) SettingsSheet(vm) { showSettings = false }
+
     val selected = followed.firstOrNull { it.id == selectedId }
     BackHandler(enabled = selected != null) { selectedId = null }
-    val openSeries: (FollowedSeries) -> Unit = {
+    BackHandler(enabled = selected == null && tab != Tab.AGENDA) { tab = Tab.AGENDA }
+    val open: (FollowedSeries) -> Unit = {
         selectedId = it.id
         vm.markSeen(it.id)
     }
+    val goSearch = { tab = Tab.SEARCH }
+    val newCount = followed.count { it.hasNew }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(selected?.title ?: "Manhwa Calendar", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = {
-                    if (selected != null) {
-                        IconButton(onClick = { selectedId = null }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = vm::refresh, enabled = !vm.refreshing) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Vérifier les sorties")
-                    }
-                    LanguageMenu(language, vm::setLanguage, onSites = { showSites = true })
-                },
-            )
-        },
+        // Chaque écran gère lui-même la barre d'état, pour que la fiche d'une série passe dessous.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (selected == null) {
-                NavigationBar {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
                     Tab.entries.forEach { t ->
                         NavigationBarItem(
                             selected = tab == t,
                             onClick = { tab = t },
                             icon = {
-                                Icon(
-                                    when (t) {
-                                        Tab.CALENDAR -> Icons.Default.DateRange
-                                        Tab.SERIES -> Icons.Default.Favorite
-                                        Tab.SEARCH -> Icons.Default.Search
-                                    },
-                                    contentDescription = null,
-                                )
+                                if (t == Tab.LIBRARY && newCount > 0) {
+                                    BadgedBox(badge = { Badge { Text("$newCount") } }) {
+                                        Icon(t.icon, contentDescription = null)
+                                    }
+                                } else {
+                                    Icon(t.icon, contentDescription = null)
+                                }
                             },
                             label = { Text(t.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                         )
                     }
                 }
             }
         },
-        snackbarHost = { SnackbarHost(snackbar) },
+        snackbarHost = {
+            SnackbarHost(snackbar, if (selected != null) Modifier.navigationBarsPadding() else Modifier)
+        },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when {
-                selected != null -> SeriesDetail(
-                    series = selected,
-                    onOpen = { context.openUrl(it) },
-                    onUnfollow = {
-                        vm.unfollow(selected.id)
-                        selectedId = null
-                    },
-                )
-                tab == Tab.SEARCH -> SearchScreen(vm, followed.map { it.id }.toSet())
-                else -> PullToRefreshBox(isRefreshing = vm.refreshing, onRefresh = vm::refresh) {
-                    if (followed.isEmpty()) {
-                        EmptyState { tab = Tab.SEARCH }
-                    } else if (tab == Tab.CALENDAR) {
-                        CalendarScreen(followed, openSeries)
-                    } else {
-                        SeriesList(followed, openSeries)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LanguageMenu(current: ChapterLanguage, onSelect: (ChapterLanguage) -> Unit, onSites: () -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "Options")
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text("Sites de recherche…") },
-                onClick = {
-                    open = false
-                    onSites()
-                },
-            )
-            HorizontalDivider()
-            Text(
-                "Langue des chapitres MangaDex",
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            ChapterLanguage.entries.forEach { lang ->
-                DropdownMenuItem(
-                    text = { Text(lang.label) },
-                    leadingIcon = { if (lang == current) Icon(Icons.Default.Check, contentDescription = null) },
-                    onClick = {
-                        open = false
-                        onSelect(lang)
-                    },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyState(onSearch: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(32.dp)) {
-        item {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Spacer(Modifier.height(48.dp))
-                Text("Aucune série suivie", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Recherchez vos manhwa pour voir leurs prochaines sorties et être notifié des nouveaux chapitres.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(16.dp))
-                Button(onClick = onSearch) { Text("Rechercher une série") }
-            }
-        }
-    }
-}
-
-// --- Calendrier ---
-
-@Composable
-private fun CalendarScreen(followed: List<FollowedSeries>, onOpen: (FollowedSeries) -> Unit) {
-    val now = Instant.now()
-    val recent = followed
-        .filter { s -> s.latestChapter?.let { Duration.between(it.readableAt, now).toDays() < 7 } == true }
-        .sortedByDescending { it.latestChapter!!.readableAt }
-    val upcoming = followed.filter { it.nextEstimate != null }.sortedBy { it.nextEstimate }
-    val unknown = followed.filter { it.nextEstimate == null }.sortedBy { it.title.lowercase() }
-
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
-        if (recent.isNotEmpty()) {
-            section("Sortis cette semaine")
-            items(recent, key = { "recent-${it.id}" }) { s ->
-                val c = s.latestChapter!!
-                SeriesRow(s, chapterLabel(c.number) + " · " + relativePast(c.readableAt), null, onOpen)
-            }
-        }
-        upcoming.groupBy { it.nextEstimate!!.localDate() }.forEach { (date, list) ->
-            section(dayHeader(date))
-            items(list, key = { "next-${it.id}" }) { s ->
-                SeriesRow(s, "Prochain : ${nextChapterLabel(s)} (estimé)", rhythm(s.intervalDays), onOpen)
-            }
-        }
-        if (unknown.isNotEmpty()) {
-            section("Date inconnue")
-            items(unknown, key = { "unknown-${it.id}" }) { s ->
-                SeriesRow(s, unknownReason(s), s.latestChapter?.let { "Dernier : ${chapterLabel(it.number)}" }, onOpen)
-            }
-        }
-    }
-}
-
-private fun LazyListScope.section(title: String) {
-    item(key = "header-$title") {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-        )
-    }
-}
-
-private fun chapterLabel(number: String?) = number?.let { "Ch. $it" } ?: "Oneshot"
-
-private fun nextChapterLabel(s: FollowedSeries): String {
-    val n = s.latestChapter?.number?.toDoubleOrNull() ?: return "nouveau chapitre"
-    return "Ch. ${n.toInt() + 1}"
-}
-
-private fun unknownReason(s: FollowedSeries) = when {
-    s.isFinished -> "Série terminée"
-    s.lastCheckedAt == null -> "Pas encore vérifiée"
-    s.recentChapters.size < 2 -> "Pas assez de chapitres traduits"
-    else -> "En pause ou rythme irrégulier"
-}
-
-// --- Mes séries ---
-
-@Composable
-private fun SeriesList(followed: List<FollowedSeries>, onOpen: (FollowedSeries) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
-        items(followed.sortedBy { it.title.lowercase() }, key = { it.id }) { s ->
-            val last = s.latestChapter?.let { "Dernier : ${chapterLabel(it.number)} · ${relativePast(it.readableAt)}" }
-                ?: "Aucun chapitre trouvé"
-            val next = s.nextEstimate?.let { "Prochain estimé : ${shortDate(it)}" } ?: unknownReason(s)
-            SeriesRow(s, last, next, onOpen)
-        }
-    }
-}
-
-@Composable
-private fun SeriesRow(series: FollowedSeries, line1: String, line2: String?, onOpen: (FollowedSeries) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clickable { onOpen(series) }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Cover(series.coverUrl, Modifier.size(width = 48.dp, height = 68.dp))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(series.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(line1, style = MaterialTheme.typography.bodyMedium)
-            if (line2 != null) {
-                Text(line2, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        if (series.hasNew) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
-        }
-    }
-}
-
-@Composable
-private fun Cover(url: String?, modifier: Modifier) {
-    val shaped = modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-    if (url != null) {
-        AsyncImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = shaped)
-    } else {
-        Box(shaped)
-    }
-}
-
-// --- Détail ---
-
-@Composable
-private fun SeriesDetail(series: FollowedSeries, onOpen: (String) -> Unit, onUnfollow: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
-        item {
-            Row {
-                Cover(series.coverUrl, Modifier.size(width = 110.dp, height = 156.dp))
-                Spacer(Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(series.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("Source : ${series.sourceLabel}", style = MaterialTheme.typography.bodyMedium)
-                    if (series.status != null) {
-                        Text("Statut : ${statusLabel(series.status)}", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    rhythm(series.intervalDays)?.let { Text("Rythme : $it", style = MaterialTheme.typography.bodyMedium) }
-                    Text(
-                        series.nextEstimate?.let { "Prochain chapitre estimé : ${dayHeader(it.localDate()).lowercase()}" }
-                            ?: unknownReason(series),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
+            Crossfade(
+                targetState = selected?.let { "series:${it.id}" } ?: "tab:${tab.name}",
+                animationSpec = tween(200),
+                label = "screen",
+            ) { screen ->
+                when (screen) {
+                    "tab:${Tab.AGENDA.name}" -> AgendaScreen(
+                        followed, vm.refreshing, vm::refresh, { showSettings = true }, open, goSearch,
                     )
-                    series.lastCheckedAt?.let {
-                        Text("Vérifié ${relativePast(it)}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onOpen(series.url) }) { Text("Ouvrir sur ${series.sourceLabel}") }
-                OutlinedButton(onClick = onUnfollow) {
-                    Icon(Icons.Default.Delete, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Ne plus suivre")
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-            Text("Derniers chapitres", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-        }
-        if (series.recentChapters.isEmpty()) {
-            item { Text("Aucun chapitre trouvé pour l'instant.") }
-        }
-        items(series.recentChapters, key = { it.id }) { c ->
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpen(c.url) }
-                    .padding(vertical = 10.dp),
-            ) {
-                Text(
-                    chapterLabel(c.number) + (c.title?.let { " — $it" } ?: ""),
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "${dayHeader(c.readableAt.localDate(), LocalDate.now())} · ${c.language.uppercase()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            HorizontalDivider()
-        }
-    }
-}
-
-private fun statusLabel(status: String?) = when (status) {
-    "ongoing" -> "en cours"
-    "completed" -> "terminée"
-    "hiatus" -> "en pause"
-    "cancelled" -> "annulée"
-    else -> "inconnu"
-}
-
-// --- Recherche ---
-
-@Composable
-private fun SearchScreen(vm: MainViewModel, followedIds: Set<String>) {
-    Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = vm.query,
-            onValueChange = vm::onQueryChange,
-            label = { Text("Titre du manhwa") },
-            singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = vm::search) { Icon(Icons.Default.Search, contentDescription = "Rechercher") }
-            },
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { vm.search() }),
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
-        )
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)) {
-            vm.siteResults.forEach { result ->
-                item(key = "site-${result.site}") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            result.site,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.weight(1f),
-                        )
-                        when {
-                            result.loading -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                            result.error != null -> Text(
-                                "indisponible",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            else -> Text("${result.items.size} résultat(s)", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    result.error?.let {
-                        Text(
-                            it,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                        )
-                    }
-                }
-                items(result.items, key = { "${result.site}-${it.id}" }) { manga ->
-                    SearchResult(manga, followed = manga.id in followedIds, onFollow = { vm.follow(manga) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SitesDialog(vm: MainViewModel, onDismiss: () -> Unit) {
-    val sites by vm.sites.collectAsState()
-    var address by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
-        title = { Text("Sites de recherche") },
-        text = {
-            LazyColumn {
-                items(sites, key = { it.name }) { site ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = site.enabled, onCheckedChange = { vm.setSiteEnabled(site.name, it) })
-                        Column(Modifier.weight(1f)) {
-                            Text(site.name, style = MaterialTheme.typography.bodyLarge)
-                            Text(
-                                site.baseUrl.removePrefix("https://"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (site.name != "MangaDex") {
-                            IconButton(onClick = { vm.removeSite(site.name) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Retirer ${site.name}")
-                            }
-                        }
-                    }
-                }
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Ajouter un site (thème WordPress Madara, adresses en /manga/ ou /webtoon/)",
-                        style = MaterialTheme.typography.bodySmall,
+                    "tab:${Tab.LIBRARY.name}" -> LibraryScreen(
+                        followed, vm.refreshing, vm::refresh, { showSettings = true }, open, goSearch,
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = address,
-                            onValueChange = { address = it },
-                            placeholder = { Text("exemple.com") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                    "tab:${Tab.SEARCH.name}" -> SearchScreen(
+                        vm, followed.map { it.id }.toSet(), sites, onSettings = { showSettings = true },
+                    )
+                    else -> followed.firstOrNull { "series:${it.id}" == screen }?.let { series ->
+                        SeriesDetailScreen(
+                            series = series,
+                            onBack = { selectedId = null },
+                            onOpenUrl = { context.openUrl(it) },
+                            onUnfollow = {
+                                vm.unfollow(series.id)
+                                selectedId = null
+                            },
                         )
-                        IconButton(onClick = {
-                            vm.addSite(address)
-                            address = ""
-                        }) {
-                            Icon(Icons.Default.Add, contentDescription = "Ajouter")
-                        }
                     }
                 }
-            }
-        },
-    )
-}
-
-@Composable
-private fun SearchResult(manga: MangaSummary, followed: Boolean, onFollow: () -> Unit) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Cover(manga.coverUrl, Modifier.size(width = 48.dp, height = 68.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(manga.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(
-                    if (manga.source == Source.WEB) {
-                        listOfNotNull(manga.sourceLabel, manga.latestChapter).joinToString(" · ")
-                    } else {
-                        listOfNotNull(manga.year?.toString(), statusLabel(manga.status), manga.originalLanguage?.uppercase())
-                            .joinToString(" · ")
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            IconButton(onClick = onFollow, enabled = !followed) {
-                Icon(
-                    if (followed) Icons.Default.Check else Icons.Default.Add,
-                    contentDescription = if (followed) "Déjà suivi" else "Suivre",
-                )
             }
         }
     }
