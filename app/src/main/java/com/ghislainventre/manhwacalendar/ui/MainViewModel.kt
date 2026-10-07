@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghislainventre.manhwacalendar.ManhwaCalendarApp
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.MangaSummary
+import com.ghislainventre.manhwacalendar.data.Recommendation
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -33,6 +34,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     val searching: Boolean get() = siteResults.any { it.loading }
     private var searchJob: Job? = null
+
+    var recommendations by mutableStateOf<List<Recommendation>>(emptyList())
+        private set
+    var recommendationsLoading by mutableStateOf(false)
+        private set
+    var recommendationsError by mutableStateOf<String?>(null)
+        private set
+    /** Séries suivies et langue au moment du dernier calcul : on ne recalcule que s'ils ont changé. */
+    private var recommendationsKey: Set<String>? = null
 
     init {
         if (followed.value.isNotEmpty()) refresh()
@@ -82,6 +92,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     siteResults = siteResults.map { if (it.site == source.name) result else it }
                 }
+            }
+        }
+    }
+
+    fun loadRecommendations(force: Boolean = false) {
+        val key = followed.value.map { it.id }.toSet() + "lang:${language.value.name}"
+        if (recommendationsLoading || (!force && key == recommendationsKey)) return
+        recommendationsKey = key
+        if (followed.value.isEmpty()) {
+            recommendations = emptyList()
+            return
+        }
+        recommendationsLoading = true
+        recommendationsError = null
+        viewModelScope.launch {
+            try {
+                recommendations = repository.recommendations()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                recommendationsError = e.message ?: "erreur inconnue"
+                recommendationsKey = null
+            } finally {
+                recommendationsLoading = false
             }
         }
     }

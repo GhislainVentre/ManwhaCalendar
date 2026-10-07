@@ -65,6 +65,30 @@ class SeriesRepository(
 
     fun isFollowed(id: String) = _followed.value.any { it.id == id }
 
+    /**
+     * Manhwa populaires proches des séries suivies. Les genres viennent de MangaDex ; pour une
+     * série suivie sur un site web, on prend la fiche MangaDex la plus pertinente pour son titre.
+     */
+    suspend fun recommendations(): List<Recommendation> {
+        val followed = _followed.value
+        val liked = api.mangas(followed.filter { it.source == Source.MANGADEX }.map { it.id }).toMutableList()
+        followed.filter { it.source == Source.WEB }.take(MAX_WEB_LOOKUPS).forEach { series ->
+            try {
+                api.search(series.title, manhwaOnly = false).firstOrNull()?.let { liked += it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Une série introuvable sur MangaDex ne compte simplement pas dans le profil.
+            }
+        }
+        val profile = Recommender.profile(liked)
+        val top = Recommender.topTags(profile)
+        if (top.isEmpty()) return emptyList()
+        val candidates = api.popularWithTags(top.map { it.id }, _language.value.codes)
+        val exclude = followed.map { it.id }.toSet() + liked.map { it.id }
+        return Recommender.rank(candidates, profile, exclude)
+    }
+
     suspend fun follow(manga: MangaSummary) {
         if (isFollowed(manga.id)) return
         val series = FollowedSeries(
@@ -240,5 +264,6 @@ class SeriesRepository(
         const val KEY_SITES = "sites"
         const val MANGADEX_NAME = "MangaDex"
         const val MAX_STORED_CHAPTERS = 15
+        const val MAX_WEB_LOOKUPS = 15
     }
 }

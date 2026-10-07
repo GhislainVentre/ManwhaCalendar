@@ -32,6 +32,32 @@ class MangaDexApi {
         return parseManga(json.getJSONObject("data"))
     }
 
+    /** Fiches de plusieurs séries en une requête (100 au plus), avec leurs genres. */
+    suspend fun mangas(ids: List<String>): List<MangaSummary> {
+        if (ids.isEmpty()) return emptyList()
+        val params = mutableListOf("limit" to "100", "includes[]" to "cover_art")
+        listOf("safe", "suggestive", "erotica", "pornographic").forEach { params += "contentRating[]" to it }
+        ids.distinct().take(100).forEach { params += "ids[]" to it }
+        return get("/manga", params).getJSONArray("data").objects().map(::parseManga)
+    }
+
+    /** Manhwa les plus suivis ayant au moins un des genres donnés et des chapitres dans l'une des langues. */
+    suspend fun popularWithTags(tagIds: List<String>, languages: List<String>): List<MangaSummary> {
+        val params = mutableListOf(
+            "limit" to "100",
+            "includes[]" to "cover_art",
+            "includedTagsMode" to "OR",
+            "order[followedCount]" to "desc",
+            "originalLanguage[]" to "ko",
+            "contentRating[]" to "safe",
+            "contentRating[]" to "suggestive",
+            "hasAvailableChapters" to "true",
+        )
+        tagIds.forEach { params += "includedTags[]" to it }
+        languages.forEach { params += "availableTranslatedLanguage[]" to it }
+        return get("/manga", params).getJSONArray("data").objects().map(::parseManga)
+    }
+
     /** Derniers chapitres traduits, du plus récent au plus ancien. */
     suspend fun latestChapters(mangaId: String, languages: List<String>, limit: Int = 60): List<Chapter> {
         val params = mutableListOf(
@@ -57,8 +83,18 @@ class MangaDexApi {
             status = attrs.optStringOrNull("status"),
             originalLanguage = attrs.optStringOrNull("originalLanguage"),
             year = if (attrs.isNull("year")) null else attrs.optInt("year"),
+            tags = parseTags(attrs),
         )
     }
+
+    /** Genres et thèmes seulement : le format (« Long Strip », « Full Color »…) est commun à tous les manhwa. */
+    private fun parseTags(attrs: JSONObject): List<Tag> =
+        attrs.optJSONArray("tags")?.objects().orEmpty().mapNotNull { tag ->
+            val tagAttrs = tag.optJSONObject("attributes") ?: return@mapNotNull null
+            if (tagAttrs.optString("group") !in setOf("genre", "theme")) return@mapNotNull null
+            val name = tagAttrs.optJSONObject("name")?.optStringOrNull("en") ?: return@mapNotNull null
+            Tag(tag.getString("id"), name)
+        }
 
     private fun pickTitle(attrs: JSONObject): String {
         val titles = attrs.optJSONObject("title") ?: JSONObject()

@@ -20,9 +20,17 @@ data class MangaSummary(
     val pageUrl: String? = null,
     val latestChapter: String? = null,
     val siteName: String? = null,
+    /** Genres et thèmes MangaDex (vide pour les sites web). */
+    val tags: List<Tag> = emptyList(),
 ) {
     val sourceLabel: String get() = siteName ?: "MangaDex"
 }
+
+/** Genre ou thème MangaDex ; [name] est le nom anglais fourni par l'API. */
+data class Tag(val id: String, val name: String)
+
+/** Série proposée, avec les genres en commun qui l'expliquent (du plus apprécié au moins apprécié). */
+data class Recommendation(val manga: MangaSummary, val reasons: List<String>)
 
 /** Un chapitre publié. */
 data class Chapter(
