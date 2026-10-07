@@ -7,8 +7,8 @@ import android.webkit.WebViewClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
@@ -24,7 +24,8 @@ import kotlin.coroutines.resume
 class WebPageScraper(context: Context) {
 
     private val appContext = context.applicationContext
-    private val mutex = Mutex()
+    // Quelques pages en parallèle pour interroger plusieurs sites à la fois sans saturer le téléphone.
+    private val permits = Semaphore(MAX_PARALLEL_PAGES)
 
     /**
      * [stateJs] doit renvoyer 2 quand la page est prête, 1 quand elle est chargée sans le contenu
@@ -32,7 +33,7 @@ class WebPageScraper(context: Context) {
      */
     @SuppressLint("SetJavaScriptEnabled")
     suspend fun scrape(url: String, stateJs: String, extractJs: String, timeoutMs: Long = 40_000): String =
-        mutex.withLock {
+        permits.withPermit {
             withContext(Dispatchers.Main) {
                 val webView = WebView(appContext)
                 try {
@@ -53,7 +54,7 @@ class WebPageScraper(context: Context) {
                             }
                         }
                     }
-                    decode(result ?: throw IOException("ToonGod ne répond pas (vérification Cloudflare ?)"))
+                    decode(result ?: throw IOException("le site ne répond pas (vérification Cloudflare ?)"))
                 } finally {
                     webView.stopLoading()
                     webView.destroy()
@@ -67,11 +68,12 @@ class WebPageScraper(context: Context) {
 
     /** evaluateJavascript renvoie la valeur encodée en JSON : on décode la chaîne. */
     private fun decode(raw: String): String {
-        if (raw == "null") throw IOException("Page ToonGod illisible")
+        if (raw == "null") throw IOException("page illisible")
         return JSONArray("[$raw]").getString(0)
     }
 
     private companion object {
         const val GRACE_TICKS = 8
+        const val MAX_PARALLEL_PAGES = 4
     }
 }

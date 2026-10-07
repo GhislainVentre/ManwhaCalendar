@@ -23,12 +23,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # Garde la même clé de signature d'un build à l'autre : sinon Android refuse
-      # d'installer la nouvelle version par-dessus l'ancienne.
+      # d'installer la nouvelle version par-dessus l'ancienne. La clé n'existe que dans
+      # le cache GitHub Actions ; elle est créée au premier build sur main.
       - name: Restaurer la clé de signature
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
-          key: android-debug-keystore
+          path: ~/manhwa-signing/release.jks
+          key: manhwa-signing-key-v1
+
+      - name: Créer la clé de signature si besoin
+        run: |
+          if [ ! -f ~/manhwa-signing/release.jks ]; then
+            mkdir -p ~/manhwa-signing
+            keytool -genkeypair -keystore ~/manhwa-signing/release.jks -alias manhwa \
+              -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 36500 \
+              -dname "CN=Manhwa Calendar"
+          fi
+          echo "MANHWA_KEYSTORE=$HOME/manhwa-signing/release.jks" >> "$GITHUB_ENV"
 
       - name: Tests unitaires
         run: ./gradlew --no-daemon testDebugUnitTest
@@ -44,9 +55,9 @@ jobs:
           name: ManhwaCalendar-apk
           path: ManhwaCalendar.apk
 
-      # Publie l'APK dans une release « latest » pour un téléchargement direct depuis le téléphone.
+      # Publie l'APK de main dans une release « latest » pour un téléchargement direct depuis le téléphone.
       - name: Publier la release
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest

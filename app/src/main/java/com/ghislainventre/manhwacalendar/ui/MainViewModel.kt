@@ -9,7 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghislainventre.manhwacalendar.ManhwaCalendarApp
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.MangaSummary
-import com.ghislainventre.manhwacalendar.data.Source
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -19,6 +19,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val followed = repository.followed
     val language = repository.language
+    val sites = repository.sites
 
     var refreshing by mutableStateOf(false)
         private set
@@ -27,14 +28,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     var query by mutableStateOf("")
         private set
-    var manhwaOnly by mutableStateOf(true)
+    /** Résultats par site, dans l'ordre des sites ; chaque site se remplit dès qu'il répond. */
+    var siteResults by mutableStateOf<List<SiteResult>>(emptyList())
         private set
-    var source by mutableStateOf(Source.TOONGOD)
-        private set
-    var searching by mutableStateOf(false)
-        private set
-    var results by mutableStateOf<List<MangaSummary>>(emptyList())
-        private set
+    val searching: Boolean get() = siteResults.any { it.loading }
     private var searchJob: Job? = null
 
     init {
@@ -45,13 +42,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (refreshing) return
         refreshing = true
         viewModelScope.launch {
-            message = try {
+            try {
                 val events = repository.refreshAll()
-                if (events.isEmpty()) null else "${events.size} nouveau(x) chapitre(s)"
+                if (events.isNotEmpty()) message = "${events.size} nouveau(x) chapitre(s)"
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                "Impossible de joindre MangaDex : ${e.message}"
+                message = "Vérification impossible : ${e.message}"
+            } finally {
+                refreshing = false
             }
-            refreshing = false
         }
     }
 
@@ -59,39 +59,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         query = value
     }
 
-    fun selectSource(value: Source) {
-        if (value == source) return
-        source = value
-        results = emptyList()
-        search()
-    }
-
-    fun toggleManhwaOnly() {
-        manhwaOnly = !manhwaOnly
-        search()
-    }
-
+    /** Interroge tous les sites activés en parallèle. */
     fun search() {
         val q = query.trim()
         if (q.isEmpty()) return
+        val sources = repository.searchSources()
+        if (sources.isEmpty()) {
+            message = "Aucun site activé (menu ⋮ → Sites de recherche)"
+            return
+        }
         searchJob?.cancel()
+        siteResults = sources.map { SiteResult(it.name) }
         searchJob = viewModelScope.launch {
-            searching = true
-            try {
-                results = repository.search(q, source, manhwaOnly)
-                if (results.isEmpty()) message = "Aucun résultat pour « $q »"
-            } catch (e: Exception) {
-                message = "Recherche impossible : ${e.message}"
-            } finally {
-                searching = false
+            sources.forEach { source ->
+                launch {
+                    val result = try {
+                        SiteResult(source.name, loading = false, items = source.search(q))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        SiteResult(source.name, loading = false, error = e.message ?: "erreur inconnue")
+                    }
+                    siteResults = siteResults.map { if (it.site == source.name) result else it }
+                }
             }
         }
     }
 
+    fun setSiteEnabled(name: String, enabled: Boolean) = repository.setSiteEnabled(name, enabled)
+
+    fun addSite(address: String) {
+        if (!repository.addSite(address)) message = "Adresse invalide ou site déjà présent"
+    }
+
+    fun removeSite(name: String) = repository.removeSite(name)
+
     fun follow(manga: MangaSummary) {
+        message = "${manga.title} ajouté à vos séries"
         viewModelScope.launch {
             repository.follow(manga)
-            message = "${manga.title} ajouté à vos séries"
         }
     }
 
@@ -109,3 +115,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         message = null
     }
 }
+
+data class SiteResult(
+    val site: String,
+    val loading: Boolean = true,
+    val items: List<MangaSummary> = emptyList(),
+    val error: String? = null,
+)

@@ -35,13 +35,14 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +55,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -93,6 +95,8 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
     var tab by rememberSaveable { mutableStateOf(Tab.CALENDAR) }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     val snackbar = remember { SnackbarHostState() }
+    var showSites by rememberSaveable { mutableStateOf(false) }
+    if (showSites) SitesDialog(vm) { showSites = false }
     val context = LocalContext.current
 
     LaunchedEffect(vm.message) {
@@ -124,7 +128,7 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
                     IconButton(onClick = vm::refresh, enabled = !vm.refreshing) {
                         Icon(Icons.Default.Refresh, contentDescription = "Vérifier les sorties")
                     }
-                    LanguageMenu(language, vm::setLanguage)
+                    LanguageMenu(language, vm::setLanguage, onSites = { showSites = true })
                 },
             )
         },
@@ -179,15 +183,23 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
 }
 
 @Composable
-private fun LanguageMenu(current: ChapterLanguage, onSelect: (ChapterLanguage) -> Unit) {
+private fun LanguageMenu(current: ChapterLanguage, onSelect: (ChapterLanguage) -> Unit, onSites: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
-            Icon(Icons.Default.MoreVert, contentDescription = "Langue des chapitres")
+            Icon(Icons.Default.MoreVert, contentDescription = "Options")
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Sites de recherche…") },
+                onClick = {
+                    open = false
+                    onSites()
+                },
+            )
+            HorizontalDivider()
             Text(
-                "Langue des chapitres",
+                "Langue des chapitres MangaDex",
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
@@ -342,7 +354,7 @@ private fun SeriesDetail(series: FollowedSeries, onOpen: (String) -> Unit, onUnf
                 Spacer(Modifier.width(16.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(series.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("Source : ${series.source.label}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Source : ${series.sourceLabel}", style = MaterialTheme.typography.bodyMedium)
                     if (series.status != null) {
                         Text("Statut : ${statusLabel(series.status)}", style = MaterialTheme.typography.bodyMedium)
                     }
@@ -360,7 +372,7 @@ private fun SeriesDetail(series: FollowedSeries, onOpen: (String) -> Unit, onUnf
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onOpen(series.url) }) { Text("Ouvrir sur ${series.source.label}") }
+                Button(onClick = { onOpen(series.url) }) { Text("Ouvrir sur ${series.sourceLabel}") }
                 OutlinedButton(onClick = onUnfollow) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
@@ -423,23 +435,99 @@ private fun SearchScreen(vm: MainViewModel, followedIds: Set<String>) {
             keyboardActions = KeyboardActions(onSearch = { vm.search() }),
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
         )
-        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Source.entries.forEach { s ->
-                FilterChip(selected = vm.source == s, onClick = { vm.selectSource(s) }, label = { Text(s.label) })
-            }
-            if (vm.source == Source.MANGADEX) {
-                FilterChip(selected = vm.manhwaOnly, onClick = vm::toggleManhwaOnly, label = { Text("Coréen uniquement") })
-            }
-        }
-        if (vm.searching) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 8.dp)) {
-            items(vm.results, key = { it.id }) { manga ->
-                SearchResult(manga, followed = manga.id in followedIds, onFollow = { vm.follow(manga) })
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)) {
+            vm.siteResults.forEach { result ->
+                item(key = "site-${result.site}") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            result.site,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        when {
+                            result.loading -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                            result.error != null -> Text(
+                                "indisponible",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            else -> Text("${result.items.size} résultat(s)", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    result.error?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                }
+                items(result.items, key = { "${result.site}-${it.id}" }) { manga ->
+                    SearchResult(manga, followed = manga.id in followedIds, onFollow = { vm.follow(manga) })
+                }
             }
         }
     }
+}
+
+@Composable
+private fun SitesDialog(vm: MainViewModel, onDismiss: () -> Unit) {
+    val sites by vm.sites.collectAsState()
+    var address by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
+        title = { Text("Sites de recherche") },
+        text = {
+            LazyColumn {
+                items(sites, key = { it.name }) { site ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = site.enabled, onCheckedChange = { vm.setSiteEnabled(site.name, it) })
+                        Column(Modifier.weight(1f)) {
+                            Text(site.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                site.baseUrl.removePrefix("https://"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (site.name != "MangaDex") {
+                            IconButton(onClick = { vm.removeSite(site.name) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Retirer ${site.name}")
+                            }
+                        }
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Ajouter un site (thème WordPress Madara, adresses en /manga/ ou /webtoon/)",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = address,
+                            onValueChange = { address = it },
+                            placeholder = { Text("exemple.com") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = {
+                            vm.addSite(address)
+                            address = ""
+                        }) {
+                            Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                        }
+                    }
+                }
+            }
+        },
+    )
 }
 
 @Composable
@@ -451,8 +539,8 @@ private fun SearchResult(manga: MangaSummary, followed: Boolean, onFollow: () ->
             Column(Modifier.weight(1f)) {
                 Text(manga.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (manga.source == Source.TOONGOD) {
-                        listOfNotNull("ToonGod", manga.latestChapter).joinToString(" · ")
+                    if (manga.source == Source.WEB) {
+                        listOfNotNull(manga.sourceLabel, manga.latestChapter).joinToString(" · ")
                     } else {
                         listOfNotNull(manga.year?.toString(), statusLabel(manga.status), manga.originalLanguage?.uppercase())
                             .joinToString(" · ")

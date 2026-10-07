@@ -7,8 +7,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Lecture des dates affichées par ToonGod (« October 3, 2026 », « 2 hours ago »…). */
-object ToonGodDates {
+/** Lecture des dates affichées par les sites Madara (« October 3, 2026 », « 2 hours ago »…). */
+object MadaraDates {
     private val formats = listOf("MMMM d, yyyy", "MMM d, yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "d MMMM yyyy", "MM/dd/yyyy")
         .map { DateTimeFormatter.ofPattern(it, Locale.ENGLISH) }
     private val relative = Regex("""(\d+|an?)\s*(sec|second|min|minute|hour|day|week|month|year)s?\s+ago""", RegexOption.IGNORE_CASE)

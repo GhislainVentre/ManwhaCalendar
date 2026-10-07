@@ -1,6 +1,7 @@
 package com.ghislainventre.manhwacalendar.data
 
 import android.content.Context
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,11 +13,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 
-/** Séries suivies, stockées localement, et leur mise à jour depuis MangaDex. */
+/** Séries suivies, stockées localement, et leur mise à jour depuis MangaDex et les sites web. */
 class SeriesRepository(
     context: Context,
     private val api: MangaDexApi = MangaDexApi(),
-    private val toonGod: ToonGodSource = ToonGodSource(WebPageScraper(context)),
+    private val madara: MadaraSource = MadaraSource(WebPageScraper(context)),
 ) {
 
     private val prefs = context.getSharedPreferences("manhwa_calendar", Context.MODE_PRIVATE)
@@ -31,10 +32,36 @@ class SeriesRepository(
     )
     val language: StateFlow<ChapterLanguage> = _language.asStateFlow()
 
-    suspend fun search(query: String, source: Source, manhwaOnly: Boolean): List<MangaSummary> = when (source) {
-        Source.MANGADEX -> api.search(query, manhwaOnly)
-        Source.TOONGOD -> toonGod.search(query)
+    private val _sites = MutableStateFlow(loadSites())
+    /** Sites web interrogés par la recherche (MangaDex en premier). */
+    val sites: StateFlow<List<Site>> = _sites.asStateFlow()
+
+    /** Une source de recherche : MangaDex ou un site web activé. */
+    class SearchSource(val name: String, val search: suspend (String) -> List<MangaSummary>)
+
+    fun searchSources(): List<SearchSource> = _sites.value.filter { it.enabled }.map { site ->
+        if (site.name == MANGADEX_NAME) {
+            SearchSource(site.name) { q -> api.search(q, manhwaOnly = true) }
+        } else {
+            SearchSource(site.name) { q -> madara.search(site, q) }
+        }
     }
+
+    fun setSiteEnabled(name: String, enabled: Boolean) =
+        saveSites(_sites.value.map { if (it.name == name) it.copy(enabled = enabled) else it })
+
+    /** Ajoute un site Madara à partir de son adresse ; renvoie false si l'adresse est invalide. */
+    fun addSite(address: String): Boolean {
+        val url = address.trim().let { if (it.startsWith("http")) it else "https://$it" }.trimEnd('/')
+        val host = runCatching { java.net.URI(url).host }.getOrNull()?.removePrefix("www.") ?: return false
+        if (!host.contains('.') || _sites.value.any { it.baseUrl.equals(url, ignoreCase = true) }) return false
+        val short = host.substringBefore('.').replaceFirstChar { it.uppercase() }
+        val name = if (_sites.value.any { it.name == short }) host else short
+        saveSites(_sites.value + Site(name, url))
+        return true
+    }
+
+    fun removeSite(name: String) = saveSites(_sites.value.filterNot { it.name == name })
 
     fun isFollowed(id: String) = _followed.value.any { it.id == id }
 
@@ -42,10 +69,16 @@ class SeriesRepository(
         if (isFollowed(manga.id)) return
         val series = FollowedSeries(
             manga.id, manga.title, manga.coverUrl, manga.status,
-            source = manga.source, pageUrl = manga.pageUrl,
+            source = manga.source, pageUrl = manga.pageUrl, siteName = manga.siteName,
         )
         mutate { it + series }
-        runCatching { refreshOne(series, notifyNew = false) }
+        try {
+            refreshOne(series, notifyNew = false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // La série reste suivie ; la prochaine vérification réessaiera.
+        }
     }
 
     fun unfollow(id: String) = mutate { list -> list.filterNot { it.id == id } }
@@ -64,6 +97,8 @@ class SeriesRepository(
         for (series in _followed.value) {
             try {
                 refreshOne(series, notifyNew = true)?.let(events::add)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 lastError = e
             }
@@ -79,8 +114,8 @@ class SeriesRepository(
                 val manga = runCatching { api.manga(series.id) }.getOrNull()
                 Fetched(manga?.title, manga?.coverUrl, manga?.status, api.latestChapters(series.id, _language.value.codes))
             }
-            Source.TOONGOD -> {
-                val page = toonGod.series(series.url)
+            Source.WEB -> {
+                val page = madara.series(series.url)
                 Fetched(page.title, page.coverUrl, null, page.chapters.sortedByDescending { it.readableAt })
             }
         }
@@ -138,6 +173,7 @@ class SeriesRepository(
         put("hasNew", hasNew)
         put("source", source.name)
         putOpt("pageUrl", pageUrl)
+        putOpt("siteName", siteName)
         put("chapters", JSONArray().apply {
             recentChapters.forEach { c ->
                 put(JSONObject().apply {
@@ -171,15 +207,38 @@ class SeriesRepository(
         intervalDays = if (has("intervalDays")) optDouble("intervalDays") else null,
         lastCheckedAt = optEpoch("lastCheckedAt"),
         hasNew = optBoolean("hasNew"),
-        source = runCatching { Source.valueOf(optString("source")) }.getOrDefault(Source.MANGADEX),
+        source = when (optString("source")) {
+            "WEB", "TOONGOD" -> Source.WEB
+            else -> Source.MANGADEX
+        },
         pageUrl = optStringOrNull("pageUrl"),
+        siteName = optStringOrNull("siteName") ?: if (optString("source") == "TOONGOD") "ToonGod" else null,
     )
+
+    private fun loadSites(): List<Site> {
+        val defaults = listOf(Site(MANGADEX_NAME, "https://mangadex.org")) + MadaraSource.DEFAULT_SITES
+        val saved = runCatching {
+            JSONArray(prefs.getString(KEY_SITES, null) ?: return defaults).objects().map {
+                Site(it.getString("name"), it.getString("url"), it.optBoolean("enabled", true))
+            }
+        }.getOrNull() ?: return defaults
+        return saved
+    }
+
+    private fun saveSites(list: List<Site>) {
+        _sites.value = list
+        val array = JSONArray()
+        list.forEach { array.put(JSONObject().put("name", it.name).put("url", it.baseUrl).put("enabled", it.enabled)) }
+        prefs.edit().putString(KEY_SITES, array.toString()).apply()
+    }
 
     private fun JSONObject.optEpoch(key: String) = if (has(key)) Instant.ofEpochMilli(getLong(key)) else null
 
     private companion object {
         const val KEY_FOLLOWED = "followed"
         const val KEY_LANGUAGE = "language"
+        const val KEY_SITES = "sites"
+        const val MANGADEX_NAME = "MangaDex"
         const val MAX_STORED_CHAPTERS = 15
     }
 }
