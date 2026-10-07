@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,10 +21,13 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -43,6 +49,7 @@ fun LibraryScreen(
     onSettings: () -> Unit,
     onOpen: (FollowedSeries) -> Unit,
     onSearch: () -> Unit,
+    onMarkAllSeen: () -> Unit,
 ) {
     val sorted = followed.sortedWith(compareByDescending<FollowedSeries> { it.hasNew }.thenBy { it.title.lowercase() })
     val newCount = followed.count { it.hasNew }
@@ -75,12 +82,23 @@ fun LibraryScreen(
                     SettingsAction(onSettings)
                 }
             }
+            if (newCount > 0) {
+                item(key = "mark-all", span = { GridItemSpan(maxLineSpan) }) {
+                    Row {
+                        TextButton(onClick = onMarkAllSeen) {
+                            Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Tout marquer comme vu")
+                        }
+                    }
+                }
+            }
             if (followed.isEmpty()) {
                 item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                     EmptyState(
                         icon = Icons.Default.Favorite,
                         title = "Aucune série suivie",
-                        body = "Ajoutez vos manhwa préférés depuis la recherche, ils apparaîtront ici.",
+                        body = "Ajoute tes manhwa préférés depuis la recherche, ils apparaîtront ici.",
                         action = "Trouver une série",
                         onAction = onSearch,
                     )

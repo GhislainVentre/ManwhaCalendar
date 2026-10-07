@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -31,13 +30,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -61,22 +57,6 @@ fun SeriesDetailScreen(
     onOpenUrl: (String) -> Unit,
     onUnfollow: () -> Unit,
 ) {
-    var confirmUnfollow by remember { mutableStateOf(false) }
-    if (confirmUnfollow) {
-        AlertDialog(
-            onDismissRequest = { confirmUnfollow = false },
-            title = { Text("Ne plus suivre ?") },
-            text = { Text("${series.title} sera retirée de vos séries et vous ne serez plus prévenu de ses sorties.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmUnfollow = false
-                    onUnfollow()
-                }) { Text("Retirer") }
-            },
-            dismissButton = { TextButton(onClick = { confirmUnfollow = false }) { Text("Annuler") } },
-        )
-    }
-
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = WindowInsets.navigationBars.asPaddingValues(),
@@ -85,13 +65,31 @@ fun SeriesDetailScreen(
         item(key = "next") { NextReleaseCard(series, Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) }
         item(key = "actions") {
             Column(Modifier.padding(horizontal = 20.dp)) {
-                Button(onClick = { onOpenUrl(series.url) }, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+                // Le geste le plus fréquent : lire le dernier chapitre, en un seul appui.
+                val latest = series.latestChapter
+                Button(
+                    onClick = { onOpenUrl(latest?.url ?: series.url) },
+                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("Lire sur ${series.sourceLabel}", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        when {
+                            latest == null -> "Ouvrir sur ${series.sourceLabel}"
+                            latest.number != null -> "Lire le chapitre ${latest.number}"
+                            else -> "Lire le dernier chapitre"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                }
+                if (latest != null) {
+                    OutlinedButton(
+                        onClick = { onOpenUrl(series.url) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp),
+                    ) { Text("Voir la série sur ${series.sourceLabel}") }
                 }
                 TextButton(
-                    onClick = { confirmUnfollow = true },
+                    onClick = onUnfollow,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) { Text("Ne plus suivre") }
@@ -212,7 +210,7 @@ private fun NextReleaseCard(series: FollowedSeries, modifier: Modifier = Modifie
         } else {
             Text(unknownReason(series), style = MaterialTheme.typography.titleMedium, color = content)
             Text(
-                "Vous serez quand même prévenu dès qu'un nouveau chapitre sort.",
+                "Tu seras quand même prévenu dès qu'un nouveau chapitre sort.",
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )

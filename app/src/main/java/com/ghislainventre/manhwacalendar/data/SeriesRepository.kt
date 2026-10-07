@@ -107,7 +107,12 @@ class SeriesRepository(
 
     fun unfollow(id: String) = mutate { list -> list.filterNot { it.id == id } }
 
+    /** Remet une série retirée par erreur, avec ses chapitres déjà connus. */
+    fun restore(series: FollowedSeries) = mutate { list -> if (list.any { it.id == series.id }) list else list + series }
+
     fun markSeen(id: String) = mutate { list -> list.map { if (it.id == id) it.copy(hasNew = false) else it } }
+
+    fun markAllSeen() = mutate { list -> list.map { it.copy(hasNew = false) } }
 
     fun setLanguage(language: ChapterLanguage) {
         _language.value = language
