@@ -2,7 +2,13 @@ package com.ghislainventre.manhwacalendar.data
 
 import java.time.Instant
 
-/** Résultat de recherche MangaDex. */
+/** Site où les chapitres sont vérifiés. */
+enum class Source(val label: String) {
+    MANGADEX("MangaDex"),
+    TOONGOD("ToonGod"),
+}
+
+/** Résultat de recherche. Pour ToonGod, [pageUrl] est la page de la série. */
 data class MangaSummary(
     val id: String,
     val title: String,
@@ -10,9 +16,12 @@ data class MangaSummary(
     val status: String?,
     val originalLanguage: String?,
     val year: Int?,
+    val source: Source = Source.MANGADEX,
+    val pageUrl: String? = null,
+    val latestChapter: String? = null,
 )
 
-/** Un chapitre publié (traduit) sur MangaDex. */
+/** Un chapitre publié. */
 data class Chapter(
     val id: String,
     val number: String?,
@@ -21,7 +30,7 @@ data class Chapter(
     val readableAt: Instant,
     val externalUrl: String?,
 ) {
-    val url: String get() = externalUrl ?: "https://mangadex.org/chapter/$id"
+    val url: String get() = externalUrl ?: if (id.startsWith("http")) id else "https://mangadex.org/chapter/$id"
 }
 
 /** Série suivie par l'utilisateur, avec son état de sortie connu. */
@@ -35,10 +44,12 @@ data class FollowedSeries(
     val intervalDays: Double? = null,
     val lastCheckedAt: Instant? = null,
     val hasNew: Boolean = false,
+    val source: Source = Source.MANGADEX,
+    val pageUrl: String? = null,
 ) {
     val latestChapter: Chapter? get() = recentChapters.firstOrNull()
     val isFinished: Boolean get() = status == "completed" || status == "cancelled"
-    val url: String get() = "https://mangadex.org/title/$id"
+    val url: String get() = pageUrl ?: "https://mangadex.org/title/$id"
 }
 
 /** Un nouveau chapitre détecté lors d'une vérification. */

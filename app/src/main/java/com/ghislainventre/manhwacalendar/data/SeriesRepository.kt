@@ -13,7 +13,11 @@ import org.json.JSONObject
 import java.time.Instant
 
 /** Séries suivies, stockées localement, et leur mise à jour depuis MangaDex. */
-class SeriesRepository(context: Context, private val api: MangaDexApi = MangaDexApi()) {
+class SeriesRepository(
+    context: Context,
+    private val api: MangaDexApi = MangaDexApi(),
+    private val toonGod: ToonGodSource = ToonGodSource(WebPageScraper(context)),
+) {
 
     private val prefs = context.getSharedPreferences("manhwa_calendar", Context.MODE_PRIVATE)
     private val refreshMutex = Mutex()
@@ -27,13 +31,19 @@ class SeriesRepository(context: Context, private val api: MangaDexApi = MangaDex
     )
     val language: StateFlow<ChapterLanguage> = _language.asStateFlow()
 
-    suspend fun search(query: String, manhwaOnly: Boolean) = api.search(query, manhwaOnly)
+    suspend fun search(query: String, source: Source, manhwaOnly: Boolean): List<MangaSummary> = when (source) {
+        Source.MANGADEX -> api.search(query, manhwaOnly)
+        Source.TOONGOD -> toonGod.search(query)
+    }
 
     fun isFollowed(id: String) = _followed.value.any { it.id == id }
 
     suspend fun follow(manga: MangaSummary) {
         if (isFollowed(manga.id)) return
-        val series = FollowedSeries(manga.id, manga.title, manga.coverUrl, manga.status)
+        val series = FollowedSeries(
+            manga.id, manga.title, manga.coverUrl, manga.status,
+            source = manga.source, pageUrl = manga.pageUrl,
+        )
         mutate { it + series }
         runCatching { refreshOne(series, notifyNew = false) }
     }
@@ -64,18 +74,29 @@ class SeriesRepository(context: Context, private val api: MangaDexApi = MangaDex
     }
 
     private suspend fun refreshOne(series: FollowedSeries, notifyNew: Boolean): NewChapterEvent? {
-        val manga = runCatching { api.manga(series.id) }.getOrNull()
-        val chapters = api.latestChapters(series.id, _language.value.codes)
-        val status = manga?.status ?: series.status
+        val fetched = when (series.source) {
+            Source.MANGADEX -> {
+                val manga = runCatching { api.manga(series.id) }.getOrNull()
+                Fetched(manga?.title, manga?.coverUrl, manga?.status, api.latestChapters(series.id, _language.value.codes))
+            }
+            Source.TOONGOD -> {
+                val page = toonGod.series(series.url)
+                Fetched(page.title, page.coverUrl, null, page.chapters.sortedByDescending { it.readableAt })
+            }
+        }
+        val chapters = fetched.chapters
+        val status = fetched.status ?: series.status
         val estimate = ReleaseEstimator.estimate(chapters, finished = status == "completed" || status == "cancelled")
 
         val previous = series.latestChapter
         val latest = chapters.firstOrNull()
-        val isNew = previous != null && latest != null && latest.readableAt.isAfter(previous.readableAt)
+        // Comparaison par identifiant : les dates relatives (« 2 hours ago ») bougent à chaque lecture.
+        val isNew = previous != null && latest != null && latest.id != previous.id &&
+            !latest.readableAt.isBefore(previous.readableAt)
 
         val updated = (_followed.value.firstOrNull { it.id == series.id } ?: return null).copy(
-            title = manga?.title ?: series.title,
-            coverUrl = manga?.coverUrl ?: series.coverUrl,
+            title = fetched.title ?: series.title,
+            coverUrl = fetched.coverUrl ?: series.coverUrl,
             status = status,
             recentChapters = chapters.distinctBy { it.number ?: it.id }.take(MAX_STORED_CHAPTERS),
             nextEstimate = estimate.next,
@@ -86,6 +107,8 @@ class SeriesRepository(context: Context, private val api: MangaDexApi = MangaDex
         mutate { list -> list.map { if (it.id == series.id) updated else it } }
         return if (isNew && notifyNew) NewChapterEvent(updated, latest!!) else null
     }
+
+    private class Fetched(val title: String?, val coverUrl: String?, val status: String?, val chapters: List<Chapter>)
 
     private fun mutate(transform: (List<FollowedSeries>) -> List<FollowedSeries>) {
         _followed.update(transform)
@@ -113,6 +136,8 @@ class SeriesRepository(context: Context, private val api: MangaDexApi = MangaDex
         putOpt("intervalDays", intervalDays)
         putOpt("lastCheckedAt", lastCheckedAt?.toEpochMilli())
         put("hasNew", hasNew)
+        put("source", source.name)
+        putOpt("pageUrl", pageUrl)
         put("chapters", JSONArray().apply {
             recentChapters.forEach { c ->
                 put(JSONObject().apply {
@@ -146,6 +171,8 @@ class SeriesRepository(context: Context, private val api: MangaDexApi = MangaDex
         intervalDays = if (has("intervalDays")) optDouble("intervalDays") else null,
         lastCheckedAt = optEpoch("lastCheckedAt"),
         hasNew = optBoolean("hasNew"),
+        source = runCatching { Source.valueOf(optString("source")) }.getOrDefault(Source.MANGADEX),
+        pageUrl = optStringOrNull("pageUrl"),
     )
 
     private fun JSONObject.optEpoch(key: String) = if (has(key)) Instant.ofEpochMilli(getLong(key)) else null

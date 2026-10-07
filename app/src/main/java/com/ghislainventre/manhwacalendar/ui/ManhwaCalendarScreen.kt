@@ -78,6 +78,7 @@ import coil.compose.AsyncImage
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.MangaSummary
+import com.ghislainventre.manhwacalendar.data.Source
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -341,7 +342,10 @@ private fun SeriesDetail(series: FollowedSeries, onOpen: (String) -> Unit, onUnf
                 Spacer(Modifier.width(16.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(series.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("Statut : ${statusLabel(series.status)}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Source : ${series.source.label}", style = MaterialTheme.typography.bodyMedium)
+                    if (series.status != null) {
+                        Text("Statut : ${statusLabel(series.status)}", style = MaterialTheme.typography.bodyMedium)
+                    }
                     rhythm(series.intervalDays)?.let { Text("Rythme : $it", style = MaterialTheme.typography.bodyMedium) }
                     Text(
                         series.nextEstimate?.let { "Prochain chapitre estimé : ${dayHeader(it.localDate()).lowercase()}" }
@@ -356,7 +360,7 @@ private fun SeriesDetail(series: FollowedSeries, onOpen: (String) -> Unit, onUnf
             }
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { onOpen(series.url) }) { Text("Ouvrir sur MangaDex") }
+                Button(onClick = { onOpen(series.url) }) { Text("Ouvrir sur ${series.source.label}") }
                 OutlinedButton(onClick = onUnfollow) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(Modifier.width(4.dp))
@@ -368,7 +372,7 @@ private fun SeriesDetail(series: FollowedSeries, onOpen: (String) -> Unit, onUnf
             Spacer(Modifier.height(4.dp))
         }
         if (series.recentChapters.isEmpty()) {
-            item { Text("Aucun chapitre traduit trouvé dans la langue choisie.") }
+            item { Text("Aucun chapitre trouvé pour l'instant.") }
         }
         items(series.recentChapters, key = { it.id }) { c ->
             Column(
@@ -419,12 +423,14 @@ private fun SearchScreen(vm: MainViewModel, followedIds: Set<String>) {
             keyboardActions = KeyboardActions(onSearch = { vm.search() }),
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
         )
-        FilterChip(
-            selected = vm.manhwaOnly,
-            onClick = vm::toggleManhwaOnly,
-            label = { Text("Manhwa (coréen) uniquement") },
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Source.entries.forEach { s ->
+                FilterChip(selected = vm.source == s, onClick = { vm.selectSource(s) }, label = { Text(s.label) })
+            }
+            if (vm.source == Source.MANGADEX) {
+                FilterChip(selected = vm.manhwaOnly, onClick = vm::toggleManhwaOnly, label = { Text("Coréen uniquement") })
+            }
+        }
         if (vm.searching) {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         }
@@ -445,8 +451,12 @@ private fun SearchResult(manga: MangaSummary, followed: Boolean, onFollow: () ->
             Column(Modifier.weight(1f)) {
                 Text(manga.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    listOfNotNull(manga.year?.toString(), statusLabel(manga.status), manga.originalLanguage?.uppercase())
-                        .joinToString(" · "),
+                    if (manga.source == Source.TOONGOD) {
+                        listOfNotNull("ToonGod", manga.latestChapter).joinToString(" · ")
+                    } else {
+                        listOfNotNull(manga.year?.toString(), statusLabel(manga.status), manga.originalLanguage?.uppercase())
+                            .joinToString(" · ")
+                    },
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

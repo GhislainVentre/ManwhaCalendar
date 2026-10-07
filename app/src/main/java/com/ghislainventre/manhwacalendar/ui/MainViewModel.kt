@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghislainventre.manhwacalendar.ManhwaCalendarApp
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.MangaSummary
+import com.ghislainventre.manhwacalendar.data.Source
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -27,6 +28,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var query by mutableStateOf("")
         private set
     var manhwaOnly by mutableStateOf(true)
+        private set
+    var source by mutableStateOf(Source.TOONGOD)
         private set
     var searching by mutableStateOf(false)
         private set
@@ -56,6 +59,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         query = value
     }
 
+    fun selectSource(value: Source) {
+        if (value == source) return
+        source = value
+        results = emptyList()
+        search()
+    }
+
     fun toggleManhwaOnly() {
         manhwaOnly = !manhwaOnly
         search()
@@ -68,7 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         searchJob = viewModelScope.launch {
             searching = true
             try {
-                results = repository.search(q, manhwaOnly)
+                results = repository.search(q, source, manhwaOnly)
                 if (results.isEmpty()) message = "Aucun résultat pour « $q »"
             } catch (e: Exception) {
                 message = "Recherche impossible : ${e.message}"

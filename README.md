@@ -4,7 +4,9 @@ Application Android qui suit les dates de sortie de vos manhwa.
 
 ## Fonctionnalités
 
-- **Recherche** de séries via l'API publique [MangaDex](https://api.mangadex.org/docs/) (filtre « manhwa coréen » activé par défaut).
+- **Recherche** de séries sur **ToonGod** (chapitres en anglais) ou via l'API publique [MangaDex](https://api.mangadex.org/docs/).
+  ToonGod est protégé par Cloudflare : l'application le lit dans un navigateur intégré invisible,
+  ce qui peut prendre quelques secondes par série.
 - **Mes séries** : liste des séries suivies avec le dernier chapitre traduit et sa date.
 - **Calendrier** : chapitres sortis cette semaine, puis prochaines sorties estimées jour par jour.
 - **Notifications** : une vérification en arrière-plan toutes les 6 heures prévient quand un nouveau chapitre sort.
@@ -12,8 +14,8 @@ Application Android qui suit les dates de sortie de vos manhwa.
 
 ## Comment la date de sortie est estimée
 
-MangaDex ne publie pas de date de sortie future. L'application regarde les dates des derniers chapitres
-traduits, calcule le rythme habituel (médiane des derniers intervalles, en regroupant les mises en ligne
+Aucune des deux sources ne publie de date de sortie future. L'application regarde les dates des derniers chapitres
+mis en ligne, calcule le rythme habituel (médiane des derniers intervalles, en regroupant les mises en ligne
 groupées) et en déduit la prochaine date probable. Si la série a plus de deux sorties de retard, elle est
 indiquée « en pause ou rythme irrégulier ».
 
