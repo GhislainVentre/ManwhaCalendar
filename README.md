@@ -22,9 +22,10 @@ d'origine. Les séries sous licence officielle (Webtoon, Tapas…) peuvent ne pa
 
 ## Installer l'APK
 
-1. Ouvrir l'onglet **Actions** du dépôt, puis la dernière exécution réussie de **Build APK**.
-2. Télécharger l'artefact `ManhwaCalendar-apk` (un zip contenant `ManhwaCalendar.apk`).
-3. Copier l'APK sur le téléphone et l'ouvrir (autoriser l'installation depuis des sources inconnues).
+Depuis le téléphone, télécharger `ManhwaCalendar.apk` dans la release
+[latest](../../releases/latest) puis l'ouvrir (autoriser l'installation depuis des sources inconnues).
+
+Chaque exécution de **Build APK** produit aussi l'artefact `ManhwaCalendar-apk` dans l'onglet **Actions**.
 
 Android 8.0 ou plus récent est requis.
 
