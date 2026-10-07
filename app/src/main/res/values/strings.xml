@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Manhwa Calendar</string>
+    <string name="notification_channel_name">Nouveaux chapitres</string>
+    <string name="notification_channel_description">Alerte quand une série suivie publie un nouveau chapitre</string>
+</resources>
