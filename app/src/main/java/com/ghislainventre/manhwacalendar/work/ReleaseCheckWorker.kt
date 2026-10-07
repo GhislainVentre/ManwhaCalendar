@@ -9,6 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.ghislainventre.manhwacalendar.ManhwaCalendarApp
+import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 /** Vérifie périodiquement les nouvelles sorties et envoie une notification. */
@@ -19,6 +20,8 @@ class ReleaseCheckWorker(context: Context, params: WorkerParameters) : Coroutine
         return try {
             repository.refreshAll().forEach { ReleaseNotifier.notifyNewChapter(applicationContext, it) }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }

@@ -7,11 +7,11 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 
-class ToonGodDatesTest {
+class MadaraDatesTest {
 
     private val now = Instant.parse("2026-10-07T08:00:00Z")
 
-    private fun parse(text: String) = ToonGodDates.parse(text, now, ZoneOffset.UTC)
+    private fun parse(text: String) = MadaraDates.parse(text, now, ZoneOffset.UTC)
 
     @Test
     fun absoluteDates() {
@@ -37,8 +37,8 @@ class ToonGodDatesTest {
 
     @Test
     fun chapterLabels() {
-        assertEquals("45.5", ToonGodDates.chapterNumber("Chapter 45.5"))
-        assertNull(ToonGodDates.chapterTitle("Chapter 45"))
-        assertEquals("The End", ToonGodDates.chapterTitle("Chapter 45 - The End"))
+        assertEquals("45.5", MadaraDates.chapterNumber("Chapter 45.5"))
+        assertNull(MadaraDates.chapterTitle("Chapter 45"))
+        assertEquals("The End", MadaraDates.chapterTitle("Chapter 45 - The End"))
     }
 }
