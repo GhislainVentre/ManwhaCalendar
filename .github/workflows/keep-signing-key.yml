@@ -1,0 +1,20 @@
+name: Garder la clé de signature
+
+# GitHub supprime un cache inutilisé pendant 7 jours. La clé de signature de l'APK vit
+# dans ce cache : si elle disparaissait, la mise à jour suivante obligerait à désinstaller
+# l'application. Ce workflow relit le cache régulièrement pour le garder en vie.
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Relire la clé de signature
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/manhwa-signing/release.jks
+          key: manhwa-signing-key-v1
+          fail-on-cache-miss: true
