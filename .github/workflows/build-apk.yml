@@ -22,6 +22,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Garde la même clé de signature d'un build à l'autre : sinon Android refuse
+      # d'installer la nouvelle version par-dessus l'ancienne.
+      - name: Restaurer la clé de signature
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore
+
       - name: Tests unitaires
         run: ./gradlew --no-daemon testDebugUnitTest
 
