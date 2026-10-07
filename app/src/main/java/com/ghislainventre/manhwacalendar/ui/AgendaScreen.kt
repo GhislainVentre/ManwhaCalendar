@@ -43,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -106,8 +108,8 @@ fun AgendaScreen(
                 item(key = "empty") {
                     EmptyState(
                         icon = Icons.Default.DateRange,
-                        title = "Votre agenda est vide",
-                        body = "Suivez vos manhwa pour voir ici leurs prochaines sorties et être prévenu à chaque nouveau chapitre.",
+                        title = "Ton agenda est vide",
+                        body = "Suis tes manhwa pour voir ici leurs prochaines sorties et être prévenu à chaque nouveau chapitre.",
                         action = "Trouver une série",
                         onAction = onSearch,
                     )
@@ -183,6 +185,10 @@ private fun WeekStrip(today: LocalDate, counts: Map<LocalDate, Int>, onDay: (Loc
                     .clip(RoundedCornerShape(16.dp))
                     .background(if (isToday) colors.primary else colors.surfaceContainer)
                     .clickable(enabled = count > 0) { onDay(date) }
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = longDate(date) + ", " +
+                            if (count == 0) "aucune sortie" else plural(count, "sortie prévue", "sorties prévues")
+                    }
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

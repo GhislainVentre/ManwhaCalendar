@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghislainventre.manhwacalendar.ManhwaCalendarApp
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
+import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Recommendation
 import kotlinx.coroutines.CancellationException
@@ -24,7 +25,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     var refreshing by mutableStateOf(false)
         private set
-    var message by mutableStateOf<String?>(null)
+    var message by mutableStateOf<UiMessage?>(null)
         private set
 
     var query by mutableStateOf("")
@@ -48,17 +49,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (followed.value.isNotEmpty()) refresh()
     }
 
-    fun refresh() {
+    /** [userInitiated] : l'utilisateur a demandé la vérification, on lui confirme aussi quand rien n'a changé. */
+    fun refresh(userInitiated: Boolean = false) {
         if (refreshing) return
         refreshing = true
         viewModelScope.launch {
             try {
                 val events = repository.refreshAll()
-                if (events.isNotEmpty()) message = "${events.size} nouveau(x) chapitre(s)"
+                when {
+                    events.isNotEmpty() -> message = UiMessage(
+                        plural(events.size, "nouveau chapitre", "nouveaux chapitres") + " !",
+                    )
+                    userInitiated -> message = UiMessage("Tout est à jour")
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                message = "Vérification impossible : ${e.message}"
+                message = UiMessage("Vérification impossible : ${e.message}")
             } finally {
                 refreshing = false
             }
@@ -67,6 +74,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onQueryChange(value: String) {
         query = value
+        // Champ vidé : on revient aux suggestions plutôt que de laisser d'anciens résultats.
+        if (value.isBlank()) {
+            searchJob?.cancel()
+            siteResults = emptyList()
+        }
     }
 
     /** Interroge tous les sites activés en parallèle. */
@@ -75,7 +87,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (q.isEmpty()) return
         val sources = repository.searchSources()
         if (sources.isEmpty()) {
-            message = "Aucun site activé (Réglages → Sites de recherche)"
+            message = UiMessage("Aucun site activé (Réglages → Sites de recherche)")
             return
         }
         searchJob?.cancel()
@@ -123,21 +135,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSiteEnabled(name: String, enabled: Boolean) = repository.setSiteEnabled(name, enabled)
 
     fun addSite(address: String) {
-        if (!repository.addSite(address)) message = "Adresse invalide ou site déjà présent"
+        if (!repository.addSite(address)) message = UiMessage("Adresse invalide ou site déjà présent")
     }
 
     fun removeSite(name: String) = repository.removeSite(name)
 
     fun follow(manga: MangaSummary) {
-        message = "${manga.title} ajouté à vos séries"
+        message = UiMessage("${manga.title} ajouté à tes séries")
         viewModelScope.launch {
             repository.follow(manga)
         }
     }
 
-    fun unfollow(id: String) = repository.unfollow(id)
+    /** Retire la série tout de suite ; la snackbar propose d'annuler. */
+    fun unfollow(series: FollowedSeries) {
+        repository.unfollow(series.id)
+        message = UiMessage("${series.title} retiré de tes séries", action = "Annuler") { repository.restore(series) }
+    }
 
     fun markSeen(id: String) = repository.markSeen(id)
+
+    fun markAllSeen() = repository.markAllSeen()
 
     fun setLanguage(language: ChapterLanguage) {
         if (language == this.language.value) return
@@ -149,6 +167,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         message = null
     }
 }
+
+/** Message en bas d'écran, avec une action facultative (« Annuler »). */
+data class UiMessage(val text: String, val action: String? = null, val onAction: () -> Unit = {})
 
 data class SiteResult(
     val site: String,
