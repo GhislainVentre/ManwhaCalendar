@@ -12,15 +12,27 @@ android {
         applicationId = "com.ghislainventre.manhwacalendar"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
+    }
+
+    // En CI, une clé stable (voir .github/workflows/build-apk.yml) ; en local, la clé de debug.
+    val ciKeystore = System.getenv("MANHWA_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (ciKeystore != null) {
+            create("ci") {
+                storeFile = ciKeystore
+                storePassword = "android"
+                keyAlias = "manhwa"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signée avec la clé de debug pour que l'APK soit installable directement.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("ci") ?: signingConfigs.getByName("debug")
         }
     }
 
