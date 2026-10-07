@@ -34,6 +34,7 @@ jobs:
       - name: Créer la clé de signature si besoin
         run: |
           if [ ! -f ~/manhwa-signing/release.jks ]; then
+            echo "::warning::Clé de signature absente du cache : une nouvelle clé est créée, il faudra désinstaller l'app une fois."
             mkdir -p ~/manhwa-signing
             keytool -genkeypair -keystore ~/manhwa-signing/release.jks -alias manhwa \
               -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 36500 \

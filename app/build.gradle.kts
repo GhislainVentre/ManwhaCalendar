@@ -12,8 +12,9 @@ android {
         applicationId = "com.ghislainventre.manhwacalendar"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        // En CI, chaque build a un numéro plus grand que le précédent : Android l'accepte comme mise à jour.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.plus(100) ?: 2
+        versionName = "1.1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
     }
 
     // En CI, une clé stable (voir .github/workflows/build-apk.yml) ; en local, la clé de debug.
