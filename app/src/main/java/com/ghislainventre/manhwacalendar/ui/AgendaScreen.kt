@@ -241,6 +241,7 @@ private fun FreshCard(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit) 
                 }
             }
             if (series.hasNew) NewBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
+            else if (series.isUpToDate) UpToDateBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         Spacer(Modifier.height(8.dp))
         Text(

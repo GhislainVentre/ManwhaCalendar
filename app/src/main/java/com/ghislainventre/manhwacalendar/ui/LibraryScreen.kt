@@ -115,6 +115,7 @@ private fun LibraryTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit
         Box {
             Cover(series.coverUrl, series.title, Modifier.fillMaxWidth().aspectRatio(2f / 3f), corner = 14.dp)
             if (series.hasNew) NewBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+            else if (series.isUpToDate) UpToDateBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
             series.nextEstimate?.let {
                 Pill(
                     shortUntil(it.localDate()),
@@ -135,7 +136,7 @@ private fun LibraryTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit
         Text(
             listOfNotNull(
                 series.latestChapter?.let { chapterLabel(it.number) } ?: "Aucun chapitre",
-                series.unreadCount?.let { if (it == 0) "à jour" else plural(it, "non lu", "non lus") },
+                series.unreadCount?.takeIf { it > 0 }?.let { plural(it, "non lu", "non lus") },
             ).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

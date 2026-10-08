@@ -89,6 +89,15 @@ fun NewBadge(modifier: Modifier = Modifier) = Pill(
     modifier = modifier,
 )
 
+/** Tous les chapitres sont lus : même forme que « NOUVEAU », dans la couleur principale. */
+@Composable
+fun UpToDateBadge(modifier: Modifier = Modifier) = Pill(
+    "À JOUR",
+    container = MaterialTheme.colorScheme.primary,
+    content = MaterialTheme.colorScheme.onPrimary,
+    modifier = modifier,
+)
+
 @Composable
 fun NewDot(modifier: Modifier = Modifier) {
     Box(modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondary))
