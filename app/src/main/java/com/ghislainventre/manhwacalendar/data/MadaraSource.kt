@@ -2,6 +2,7 @@ package com.ghislainventre.manhwacalendar.data
 
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.time.Instant
 
 /**
  * Lecture des sites de manhwa construits sur WordPress avec le thème « Madara »
@@ -33,15 +34,20 @@ class MadaraSource(private val scraper: WebPageScraper) {
 
     suspend fun series(pageUrl: String): SeriesPage {
         val json = JSONObject(scraper.scrape(pageUrl, SERIES_STATE_JS, SERIES_EXTRACT_JS))
+        // Les chapitres sont listés du plus récent au plus ancien. Une date illisible (format inconnu,
+        // badge « NEW » sans texte) reprend celle du chapitre plus récent au lieu de faire disparaître le chapitre.
+        var newerDate = Instant.now()
         val chapters = json.getJSONArray("ch").objects().mapNotNull { c ->
             val href = c.optStringOrNull("u") ?: return@mapNotNull null
             val label = c.optString("n").trim()
+            val date = MadaraDates.parse(c.optString("d")) ?: newerDate
+            newerDate = date
             Chapter(
                 id = href,
                 number = MadaraDates.chapterNumber(label),
                 title = MadaraDates.chapterTitle(label),
                 language = "en",
-                readableAt = MadaraDates.parse(c.optString("d")) ?: return@mapNotNull null,
+                readableAt = date,
                 externalUrl = href,
             )
         }

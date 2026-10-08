@@ -2,6 +2,9 @@ package com.ghislainventre.manhwacalendar.data
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,7 +14,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 
 /** Séries suivies, stockées localement, et leur mise à jour depuis MangaDex et les sites web. */
 class SeriesRepository(
@@ -22,6 +27,8 @@ class SeriesRepository(
 
     private val prefs = context.getSharedPreferences("manhwa_calendar", Context.MODE_PRIVATE)
     private val refreshMutex = Mutex()
+    /** Dernière recherche d'une série MangaDex sur les sites web, par identifiant. */
+    private val webLookups = ConcurrentHashMap<String, Instant>()
 
     private val _followed = MutableStateFlow(load())
     val followed: StateFlow<List<FollowedSeries>> = _followed.asStateFlow()
@@ -147,7 +154,16 @@ class SeriesRepository(
         val fetched = when (series.source) {
             Source.MANGADEX -> {
                 val manga = runCatching { api.manga(series.id) }.getOrNull()
-                Fetched(manga?.title, manga?.coverUrl, manga?.status, api.latestChapters(series.id, _language.value.codes))
+                val chapters = api.latestChapters(series.id, _language.value.codes)
+                val status = manga?.status ?: series.status
+                // Beaucoup de séries n'ont presque plus de chapitres sur MangaDex (retraits, équipes parties) :
+                // on bascule alors sur un site de lecture qui en a de plus récents.
+                val web = if (looksAbandoned(chapters, status)) findOnWeb(series, chapters) else null
+                if (web != null) {
+                    Fetched(manga?.title, manga?.coverUrl, status, web.page.chapters.sortedByDescending { it.readableAt }, web)
+                } else {
+                    Fetched(manga?.title, manga?.coverUrl, status, chapters)
+                }
             }
             Source.WEB -> {
                 val page = madara.series(series.url)
@@ -167,6 +183,9 @@ class SeriesRepository(
 
         val updated = (_followed.value.firstOrNull { it.id == series.id } ?: return null).copy(
             title = fetched.title ?: series.title,
+            source = if (fetched.web != null) Source.WEB else series.source,
+            pageUrl = fetched.web?.pageUrl ?: series.pageUrl,
+            siteName = fetched.web?.site?.name ?: series.siteName,
             coverUrl = fetched.coverUrl ?: series.coverUrl,
             status = status,
             recentChapters = sorted.distinctBy { it.number ?: it.id }.take(MAX_STORED_CHAPTERS),
@@ -179,7 +198,66 @@ class SeriesRepository(
         return if (isNew && notifyNew) NewChapterEvent(updated, latest!!) else null
     }
 
-    private class Fetched(val title: String?, val coverUrl: String?, val status: String?, val chapters: List<Chapter>)
+    private class Fetched(
+        val title: String?,
+        val coverUrl: String?,
+        val status: String?,
+        val chapters: List<Chapter>,
+        val web: WebMatch? = null,
+    )
+
+    private class WebMatch(val site: Site, val pageUrl: String, val page: MadaraSource.SeriesPage)
+
+    /** Aucun chapitre dans les langues choisies, ou plus rien depuis longtemps sur une série en cours. */
+    private fun looksAbandoned(chapters: List<Chapter>, status: String?): Boolean {
+        val newest = chapters.maxOfOrNull { it.readableAt } ?: return true
+        if (status == "completed" || status == "cancelled") return false
+        return newest.isBefore(Instant.now().minus(STALE_AFTER))
+    }
+
+    /**
+     * Cherche la série sur les sites activés, sous ses titres anglais MangaDex, et renvoie la première
+     * page qui va plus loin que les [known] chapitres MangaDex. Une recherche par série et par jour au plus,
+     * car chaque site passe par une WebView.
+     */
+    private suspend fun findOnWeb(series: FollowedSeries, known: List<Chapter>): WebMatch? {
+        val now = Instant.now()
+        if (webLookups[series.id]?.isAfter(now.minus(WEB_LOOKUP_INTERVAL)) == true) return null
+        webLookups[series.id] = now
+
+        val titles = (orEmptyOnError { api.titles(series.id) } + series.title).distinctBy(TitleMatch::normalize)
+        val sites = _sites.value.filter { it.enabled && it.name != MANGADEX_NAME }
+        val hits = coroutineScope {
+            sites.map { site ->
+                async {
+                    orEmptyOnError { madara.search(site, titles.first()) }
+                        .filter { it.pageUrl != null && TitleMatch.matches(it.title, titles) }
+                        .map { site to it.pageUrl!! }
+                }
+            }.awaitAll().flatten()
+        }
+        val knownTop = known.maxOfOrNull { it.number?.toDoubleOrNull() ?: -1.0 } ?: -1.0
+        for ((site, url) in hits.take(MAX_WEB_PAGES)) {
+            val page = try {
+                madara.series(url)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                continue
+            }
+            val top = page.chapters.maxOfOrNull { it.number?.toDoubleOrNull() ?: -1.0 } ?: continue
+            if (top > knownTop) return WebMatch(site, url, page)
+        }
+        return null
+    }
+
+    private suspend fun <T> orEmptyOnError(block: suspend () -> List<T>): List<T> = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     private fun mutate(transform: (List<FollowedSeries>) -> List<FollowedSeries>) {
         _followed.update(transform)
@@ -281,5 +359,8 @@ class SeriesRepository(
         const val MANGADEX_NAME = "MangaDex"
         const val MAX_STORED_CHAPTERS = 15
         const val MAX_WEB_LOOKUPS = 15
+        const val MAX_WEB_PAGES = 3
+        val STALE_AFTER: Duration = Duration.ofDays(30)
+        val WEB_LOOKUP_INTERVAL: Duration = Duration.ofHours(12)
     }
 }
