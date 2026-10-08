@@ -155,11 +155,12 @@ class SeriesRepository(
             }
         }
         val chapters = fetched.chapters
+        val sorted = chapters.sortedWith(Chapter.NEWEST_FIRST)
         val status = fetched.status ?: series.status
         val estimate = ReleaseEstimator.estimate(chapters, finished = status == "completed" || status == "cancelled")
 
         val previous = series.latestChapter
-        val latest = chapters.firstOrNull()
+        val latest = sorted.firstOrNull()
         // Comparaison par identifiant : les dates relatives (« 2 hours ago ») bougent à chaque lecture.
         val isNew = previous != null && latest != null && latest.id != previous.id &&
             !latest.readableAt.isBefore(previous.readableAt)
@@ -168,7 +169,7 @@ class SeriesRepository(
             title = fetched.title ?: series.title,
             coverUrl = fetched.coverUrl ?: series.coverUrl,
             status = status,
-            recentChapters = chapters.distinctBy { it.number ?: it.id }.take(MAX_STORED_CHAPTERS),
+            recentChapters = sorted.distinctBy { it.number ?: it.id }.take(MAX_STORED_CHAPTERS),
             nextEstimate = estimate.next,
             intervalDays = estimate.intervalDays,
             lastCheckedAt = Instant.now(),
@@ -239,7 +240,7 @@ class SeriesRepository(
                 readableAt = Instant.ofEpochMilli(c.getLong("readableAt")),
                 externalUrl = c.optStringOrNull("externalUrl"),
             )
-        },
+        }.sortedWith(Chapter.NEWEST_FIRST),
         nextEstimate = optEpoch("nextEstimate"),
         intervalDays = if (has("intervalDays")) optDouble("intervalDays") else null,
         lastCheckedAt = optEpoch("lastCheckedAt"),

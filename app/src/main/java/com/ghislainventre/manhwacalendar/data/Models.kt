@@ -42,6 +42,15 @@ data class Chapter(
     val externalUrl: String?,
 ) {
     val url: String get() = externalUrl ?: if (id.startsWith("http")) id else "https://mangadex.org/chapter/$id"
+
+    companion object {
+        /**
+         * Du plus récent au plus ancien, d'après le numéro : les dates ne suffisent pas (plusieurs chapitres
+         * mis en ligne le même jour, anciens chapitres réimportés). Les chapitres sans numéro vont à la fin.
+         */
+        val NEWEST_FIRST: Comparator<Chapter> =
+            compareByDescending<Chapter> { it.number?.toDoubleOrNull() }.thenByDescending { it.readableAt }
+    }
 }
 
 /** Série suivie par l'utilisateur, avec son état de sortie connu. */
