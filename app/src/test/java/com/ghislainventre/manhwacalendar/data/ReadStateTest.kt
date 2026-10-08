@@ -70,3 +70,25 @@ class ReadStateTest {
         assertEquals(0, s.unreadCount)
     }
 }
+
+class ChapterOrderTest {
+
+    private fun chapter(number: String?, day: Long) = Chapter(
+        id = "id-$number-$day",
+        number = number,
+        title = null,
+        language = "en",
+        readableAt = Instant.EPOCH.plusSeconds(day * 86_400),
+        externalUrl = null,
+    )
+
+    @Test
+    fun sortsByNumberThenDate() {
+        // Mis en ligne le même jour, ou un ancien chapitre réimporté plus tard.
+        val chapters = listOf(chapter("9", 5), chapter("10", 3), chapter("10.5", 3), chapter(null, 9), chapter("2", 8))
+        assertEquals(
+            listOf("10.5", "10", "9", "2", null),
+            chapters.sortedWith(Chapter.NEWEST_FIRST).map { it.number },
+        )
+    }
+}
