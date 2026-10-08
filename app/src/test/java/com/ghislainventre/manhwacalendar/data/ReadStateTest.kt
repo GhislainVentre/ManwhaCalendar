@@ -32,6 +32,7 @@ class ReadStateTest {
     fun nothingTrackedBeforeFirstMark() {
         assertNull(series.unreadCount)
         assertNull(series.nextToRead)
+        assertFalse(series.isUpToDate)
     }
 
     @Test
@@ -41,6 +42,7 @@ class ReadStateTest {
         assertTrue(s.isRead(chapter("11")))
         assertFalse(s.isRead(chapter("11.5")))
         assertEquals(2, s.unreadCount)
+        assertFalse(s.isUpToDate)
         assertEquals("11.5", s.nextToRead?.number)
         assertTrue(s.hasNew)
     }
@@ -51,6 +53,7 @@ class ReadStateTest {
         assertEquals(0, s.unreadCount)
         assertNull(s.nextToRead)
         assertFalse(s.hasNew)
+        assertTrue(s.isUpToDate)
     }
 
     @Test

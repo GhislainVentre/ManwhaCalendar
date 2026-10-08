@@ -86,6 +86,9 @@ data class FollowedSeries(
     /** Chapitres connus pas encore lus ; null si l'utilisateur n'a jamais rien marqué comme lu. */
     val unreadCount: Int? get() = if (tracksReading) recentChapters.count { !isRead(it) } else null
 
+    /** Tous les chapitres connus sont lus. */
+    val isUpToDate: Boolean get() = recentChapters.isNotEmpty() && unreadCount == 0
+
     /** Le plus ancien chapitre connu non lu : celui à lire ensuite. */
     val nextToRead: Chapter? get() = if (tracksReading) recentChapters.lastOrNull { !isRead(it) } else null
 
