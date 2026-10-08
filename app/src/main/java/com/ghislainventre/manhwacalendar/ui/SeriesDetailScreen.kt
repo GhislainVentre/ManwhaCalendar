@@ -1,6 +1,7 @@
 package com.ghislainventre.manhwacalendar.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,9 +20,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,6 +45,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -56,6 +61,8 @@ fun SeriesDetailScreen(
     onBack: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onUnfollow: () -> Unit,
+    onSetRead: (Chapter, Boolean) -> Unit,
+    onMarkAllRead: () -> Unit,
 ) {
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -65,16 +72,20 @@ fun SeriesDetailScreen(
         item(key = "next") { NextReleaseCard(series, Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) }
         item(key = "actions") {
             Column(Modifier.padding(horizontal = 20.dp)) {
-                // Le geste le plus fréquent : lire le dernier chapitre, en un seul appui.
+                // Le geste le plus fréquent, en un seul appui : reprendre au premier chapitre non lu,
+                // ou lire le dernier chapitre.
                 val latest = series.latestChapter
+                val next = series.nextToRead
                 Button(
-                    onClick = { onOpenUrl(latest?.url ?: series.url) },
+                    onClick = { onOpenUrl(next?.url ?: latest?.url ?: series.url) },
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         when {
+                            next != null && next.id != latest?.id ->
+                                if (next.number != null) "Continuer au chapitre ${next.number}" else "Continuer la lecture"
                             latest == null -> "Ouvrir sur ${series.sourceLabel}"
                             latest.number != null -> "Lire le chapitre ${latest.number}"
                             else -> "Lire le dernier chapitre"
@@ -97,7 +108,10 @@ fun SeriesDetailScreen(
         }
         item(key = "chapters-title") {
             SectionTitle("Chapitres") {
-                series.lastCheckedAt?.let {
+                val unread = series.unreadCount
+                if (series.recentChapters.isNotEmpty() && unread != 0) {
+                    TextButton(onClick = onMarkAllRead) { Text("Tout marquer lu") }
+                } else series.lastCheckedAt?.let {
                     Text(
                         "Vérifié ${relativePast(it)}",
                         style = MaterialTheme.typography.bodySmall,
@@ -117,7 +131,10 @@ fun SeriesDetailScreen(
                 )
             }
         }
-        items(series.recentChapters, key = { it.id }) { c -> ChapterRow(c) { onOpenUrl(c.url) } }
+        items(series.recentChapters, key = { it.id }) { c ->
+            val read = series.isRead(c)
+            ChapterRow(c, read, onClick = { onOpenUrl(c.url) }, onToggleRead = { onSetRead(c, !read) })
+        }
     }
 }
 
@@ -219,15 +236,18 @@ private fun NextReleaseCard(series: FollowedSeries, modifier: Modifier = Modifie
 }
 
 @Composable
-private fun ChapterRow(chapter: Chapter, onClick: () -> Unit) {
+private fun ChapterRow(chapter: Chapter, read: Boolean, onClick: () -> Unit, onToggleRead: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(start = 8.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        ReadToggle(read, onToggleRead)
+        // Les chapitres lus passent au second plan.
+        val dim = Modifier.alpha(if (read) 0.5f else 1f)
+        Column(Modifier.weight(1f).padding(vertical = 10.dp).then(dim)) {
             Text(chapterLabel(chapter.number), style = MaterialTheme.typography.titleSmall)
             chapter.title?.takeIf { it.isNotBlank() }?.let {
                 Text(
@@ -240,7 +260,7 @@ private fun ChapterRow(chapter: Chapter, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
+        Column(dim, horizontalAlignment = Alignment.End) {
             Text(
                 relativePast(chapter.readableAt),
                 style = MaterialTheme.typography.bodySmall,
@@ -254,4 +274,27 @@ private fun ChapterRow(chapter: Chapter, onClick: () -> Unit) {
         }
     }
     HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/** Pastille « lu » : cochée quand le chapitre est lu ; un appui marque aussi les chapitres précédents. */
+@Composable
+private fun ReadToggle(read: Boolean, onToggle: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    IconButton(onClick = onToggle) {
+        Box(
+            Modifier
+                .size(26.dp)
+                .clip(CircleShape)
+                .semantics { contentDescription = if (read) "Lu, appuyer pour marquer non lu" else "Marquer comme lu" }
+                .then(
+                    if (read) Modifier.background(colors.primary)
+                    else Modifier.border(2.dp, colors.outline, CircleShape)
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (read) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
 }

@@ -112,6 +112,12 @@ class SeriesRepository(
 
     fun markSeen(id: String) = mutate { list -> list.map { if (it.id == id) it.copy(hasNew = false) else it } }
 
+    /** Marque un chapitre (et les précédents) comme lu, ou le démarque. */
+    fun setRead(id: String, chapter: Chapter, read: Boolean) =
+        mutate { list -> list.map { if (it.id == id) it.withRead(chapter, read) else it } }
+
+    fun markAllRead(id: String) = mutate { list -> list.map { if (it.id == id) it.withAllRead() else it } }
+
     fun markAllSeen() = mutate { list -> list.map { it.copy(hasNew = false) } }
 
     fun setLanguage(language: ChapterLanguage) {
@@ -203,6 +209,8 @@ class SeriesRepository(
         put("source", source.name)
         putOpt("pageUrl", pageUrl)
         putOpt("siteName", siteName)
+        putOpt("lastReadNumber", lastReadNumber)
+        putOpt("lastReadId", lastReadId)
         put("chapters", JSONArray().apply {
             recentChapters.forEach { c ->
                 put(JSONObject().apply {
@@ -242,6 +250,8 @@ class SeriesRepository(
         },
         pageUrl = optStringOrNull("pageUrl"),
         siteName = optStringOrNull("siteName") ?: if (optString("source") == "TOONGOD") "ToonGod" else null,
+        lastReadNumber = if (has("lastReadNumber")) optDouble("lastReadNumber") else null,
+        lastReadId = optStringOrNull("lastReadId"),
     )
 
     private fun loadSites(): List<Site> {

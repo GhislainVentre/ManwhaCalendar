@@ -133,7 +133,10 @@ private fun LibraryTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            series.latestChapter?.let { chapterLabel(it.number) } ?: "Aucun chapitre",
+            listOfNotNull(
+                series.latestChapter?.let { chapterLabel(it.number) } ?: "Aucun chapitre",
+                series.unreadCount?.let { if (it == 0) "à jour" else plural(it, "non lu", "non lus") },
+            ).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

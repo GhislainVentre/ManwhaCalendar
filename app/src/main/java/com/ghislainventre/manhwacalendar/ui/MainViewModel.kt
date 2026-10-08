@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghislainventre.manhwacalendar.ManhwaCalendarApp
+import com.ghislainventre.manhwacalendar.data.Chapter
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.MangaSummary
@@ -156,6 +157,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun markSeen(id: String) = repository.markSeen(id)
 
     fun markAllSeen() = repository.markAllSeen()
+
+    fun setRead(series: FollowedSeries, chapter: Chapter, read: Boolean) = repository.setRead(series.id, chapter, read)
+
+    fun markAllRead(series: FollowedSeries) = repository.markAllRead(series.id)
 
     fun setLanguage(language: ChapterLanguage) {
         if (language == this.language.value) return

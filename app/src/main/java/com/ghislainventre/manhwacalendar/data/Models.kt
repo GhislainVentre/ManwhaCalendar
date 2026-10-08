@@ -58,9 +58,51 @@ data class FollowedSeries(
     val source: Source = Source.MANGADEX,
     val pageUrl: String? = null,
     val siteName: String? = null,
+    /** Dernier chapitre marqué comme lu : tous les chapitres de numéro inférieur ou égal sont lus. */
+    val lastReadNumber: Double? = null,
+    /** Identifiant du dernier chapitre marqué comme lu, pour les chapitres sans numéro. */
+    val lastReadId: String? = null,
 ) {
     val sourceLabel: String get() = siteName ?: "MangaDex"
     val latestChapter: Chapter? get() = recentChapters.firstOrNull()
+
+    /** Vrai dès qu'un chapitre a été marqué comme lu au moins une fois. */
+    val tracksReading: Boolean get() = lastReadNumber != null || lastReadId != null
+
+    fun isRead(chapter: Chapter): Boolean {
+        val n = chapter.number?.toDoubleOrNull()
+        return if (n != null && lastReadNumber != null) n <= lastReadNumber else chapter.id == lastReadId
+    }
+
+    /** Chapitres connus pas encore lus ; null si l'utilisateur n'a jamais rien marqué comme lu. */
+    val unreadCount: Int? get() = if (tracksReading) recentChapters.count { !isRead(it) } else null
+
+    /** Le plus ancien chapitre connu non lu : celui à lire ensuite. */
+    val nextToRead: Chapter? get() = if (tracksReading) recentChapters.lastOrNull { !isRead(it) } else null
+
+    /** Marque [chapter] et tous les précédents comme lus, ou le démarque (avec les suivants). */
+    fun withRead(chapter: Chapter, read: Boolean): FollowedSeries {
+        val n = chapter.number?.toDoubleOrNull()
+        if (read) {
+            return copy(
+                lastReadNumber = n ?: lastReadNumber,
+                lastReadId = chapter.id,
+                hasNew = hasNew && chapter.id != latestChapter?.id,
+            )
+        }
+        if (n == null) return copy(lastReadId = null)
+        // Le dernier lu devient le chapitre connu juste avant celui-ci.
+        val previous = recentChapters
+            .filter { (it.number?.toDoubleOrNull() ?: Double.MAX_VALUE) < n }
+            .maxByOrNull { it.number!!.toDouble() }
+        return copy(lastReadNumber = previous?.number?.toDouble(), lastReadId = previous?.id)
+    }
+
+    /** Marque tous les chapitres connus comme lus. */
+    fun withAllRead(): FollowedSeries {
+        val newest = recentChapters.maxByOrNull { it.number?.toDoubleOrNull() ?: Double.MIN_VALUE } ?: return this
+        return withRead(newest, true).copy(hasNew = false)
+    }
     val isFinished: Boolean get() = status == "completed" || status == "cancelled"
     val url: String get() = pageUrl ?: "https://mangadex.org/title/$id"
 }
