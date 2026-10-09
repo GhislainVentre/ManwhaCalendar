@@ -49,8 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
-import java.time.Duration
-import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -66,9 +64,8 @@ fun AgendaScreen(
     onSearch: () -> Unit,
 ) {
     val today = LocalDate.now()
-    val now = Instant.now()
-    val fresh = followed
-        .filter { s -> s.hasNew || s.latestChapter?.let { Duration.between(it.readableAt, now).toDays() < 7 } == true }
+    // Toutes les séries suivies : les nouveautés d'abord, puis les plus récemment sorties.
+    val mine = followed
         .sortedWith(compareByDescending<FollowedSeries> { it.hasNew }.thenByDescending { it.latestChapter?.readableAt })
     val byDay = followed
         .filter { it.nextEstimate != null }
@@ -82,7 +79,7 @@ fun AgendaScreen(
     var showUnknown by rememberSaveable { mutableStateOf(false) }
 
     // Position de chaque jour dans la liste, pour y sauter depuis le bandeau de la semaine.
-    var index = 2 + (if (fresh.isNotEmpty()) 2 else 0) + (if (byDay.isNotEmpty()) 1 else 0)
+    var index = 2 + (if (mine.isNotEmpty()) 2 else 0) + (if (byDay.isNotEmpty()) 1 else 0)
     val dayIndex = byDay.keys.associateWith { index++ }
 
     PullToRefreshBox(
@@ -121,14 +118,14 @@ fun AgendaScreen(
                     dayIndex[date]?.let { scope.launch { listState.animateScrollToItem(it) } }
                 }
             }
-            if (fresh.isNotEmpty()) {
-                item(key = "fresh-title") { SectionTitle("Nouveaux chapitres") }
-                item(key = "fresh") {
+            if (mine.isNotEmpty()) {
+                item(key = "mine-title") { SectionTitle("Mes manhwa") }
+                item(key = "mine") {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 20.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(fresh, key = { it.id }) { FreshCard(it, onOpen) }
+                        items(mine, key = { it.id }) { SeriesTile(it, onOpen) }
                     }
                 }
             }
@@ -213,7 +210,7 @@ private fun WeekStrip(today: LocalDate, counts: Map<LocalDate, Int>, onDay: (Loc
 }
 
 @Composable
-private fun FreshCard(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit) {
+private fun SeriesTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit) {
     val chapter = series.latestChapter
     Column(
         Modifier
