@@ -2,6 +2,8 @@ package com.ghislainventre.manhwacalendar.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +42,14 @@ class WebPageScraper(context: Context) {
                     webView.settings.javaScriptEnabled = true
                     webView.settings.domStorageEnabled = true
                     webView.settings.blockNetworkImage = true
-                    webView.webViewClient = WebViewClient()
+                    // Site injoignable (domaine mort, connexion refusée) : on abandonne tout de suite
+                    // au lieu d'attendre la fin du délai.
+                    var unreachable: String? = null
+                    webView.webViewClient = object : WebViewClient() {
+                        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                            if (request.isForMainFrame) unreachable = error.description?.toString() ?: "site injoignable"
+                        }
+                    }
                     webView.loadUrl(url)
 
                     var result: String? = null
@@ -48,6 +57,7 @@ class WebPageScraper(context: Context) {
                     withTimeoutOrNull(timeoutMs) {
                         while (result == null) {
                             delay(1_000)
+                            unreachable?.let { throw IOException("site injoignable ($it)") }
                             when (webView.eval(stateJs)) {
                                 "2" -> result = webView.eval(extractJs)
                                 "1" -> if (++loadedTicks >= GRACE_TICKS) result = webView.eval(extractJs)
@@ -74,6 +84,6 @@ class WebPageScraper(context: Context) {
 
     private companion object {
         const val GRACE_TICKS = 8
-        const val MAX_PARALLEL_PAGES = 4
+        const val MAX_PARALLEL_PAGES = 6
     }
 }

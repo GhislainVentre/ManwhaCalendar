@@ -14,6 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -29,6 +30,8 @@ class SeriesRepository(
     private val refreshMutex = Mutex()
     /** Dernière recherche d'une série MangaDex sur les sites web, par identifiant. */
     private val webLookups = ConcurrentHashMap<String, Instant>()
+    /** Échecs de recherche consécutifs par site. */
+    private val siteFailures = ConcurrentHashMap<String, Int>()
 
     private val _followed = MutableStateFlow(load())
     val followed: StateFlow<List<FollowedSeries>> = _followed.asStateFlow()
@@ -50,8 +53,26 @@ class SeriesRepository(
         if (site.name == MANGADEX_NAME) {
             SearchSource(site.name) { q -> api.search(q, manhwaOnly = true) }
         } else {
-            SearchSource(site.name) { q -> madara.search(site, q) }
+            SearchSource(site.name) { q -> searchSite(site, q) }
         }
+    }
+
+    /**
+     * Recherche sur un site ; après [MAX_SITE_FAILURES] échecs de suite (délai dépassé, site injoignable),
+     * le site est désactivé pour ne plus ralentir les recherches. Il reste réactivable dans les réglages.
+     */
+    private suspend fun searchSite(site: Site, query: String): List<MangaSummary> = try {
+        madara.search(site, query).also { siteFailures.remove(site.name) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        val failures = siteFailures.merge(site.name, 1) { a, b -> a + b } ?: 1
+        if (failures >= MAX_SITE_FAILURES) {
+            siteFailures.remove(site.name)
+            setSiteEnabled(site.name, false)
+            throw IOException("${e.message} · site désactivé, réactivable dans les réglages")
+        }
+        throw e
     }
 
     fun setSiteEnabled(name: String, enabled: Boolean) =
@@ -340,14 +361,23 @@ class SeriesRepository(
                 Site(it.getString("name"), it.getString("url"), it.optBoolean("enabled", true))
             }
         }.getOrNull() ?: return defaults
-        return saved
+        if (prefs.getInt(KEY_SITES_VERSION, 0) >= SITES_VERSION) return saved
+        // Nouvelle liste par défaut : on ajoute les nouveaux sites et on retire les sites morts,
+        // sans toucher aux sites ajoutés ou désactivés par l'utilisateur.
+        val kept = saved.filterNot { it.baseUrl.trimEnd('/') in MadaraSource.REMOVED_SITES }
+        val added = defaults.filter { d -> kept.none { it.baseUrl.equals(d.baseUrl, ignoreCase = true) || it.name == d.name } }
+        return (kept + added).also(::persistSites)
     }
 
     private fun saveSites(list: List<Site>) {
         _sites.value = list
+        persistSites(list)
+    }
+
+    private fun persistSites(list: List<Site>) {
         val array = JSONArray()
         list.forEach { array.put(JSONObject().put("name", it.name).put("url", it.baseUrl).put("enabled", it.enabled)) }
-        prefs.edit().putString(KEY_SITES, array.toString()).apply()
+        prefs.edit().putString(KEY_SITES, array.toString()).putInt(KEY_SITES_VERSION, SITES_VERSION).apply()
     }
 
     private fun JSONObject.optEpoch(key: String) = if (has(key)) Instant.ofEpochMilli(getLong(key)) else null
@@ -356,6 +386,10 @@ class SeriesRepository(
         const val KEY_FOLLOWED = "followed"
         const val KEY_LANGUAGE = "language"
         const val KEY_SITES = "sites"
+        const val KEY_SITES_VERSION = "sites_version"
+        /** À augmenter quand la liste des sites par défaut change. */
+        const val SITES_VERSION = 1
+        const val MAX_SITE_FAILURES = 2
         const val MANGADEX_NAME = "MangaDex"
         const val MAX_STORED_CHAPTERS = 15
         const val MAX_WEB_LOOKUPS = 15
