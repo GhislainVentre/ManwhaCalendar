@@ -89,14 +89,18 @@ fun NewBadge(modifier: Modifier = Modifier) = Pill(
     modifier = modifier,
 )
 
-/** Tous les chapitres sont lus : même forme que « NOUVEAU », dans la couleur principale. */
+/** Tous les chapitres sont lus : même forme que « NOUVEAU », en vert. */
 @Composable
 fun UpToDateBadge(modifier: Modifier = Modifier) = Pill(
     "À JOUR",
-    container = MaterialTheme.colorScheme.primary,
-    content = MaterialTheme.colorScheme.onPrimary,
+    container = UpToDateGreen,
+    content = OnUpToDateGreen,
     modifier = modifier,
 )
+
+// Le badge est posé sur les couvertures : un même vert lisible quel que soit le thème.
+private val UpToDateGreen = Color(0xFF34C77B)
+private val OnUpToDateGreen = Color(0xFF00210F)
 
 @Composable
 fun NewDot(modifier: Modifier = Modifier) {
