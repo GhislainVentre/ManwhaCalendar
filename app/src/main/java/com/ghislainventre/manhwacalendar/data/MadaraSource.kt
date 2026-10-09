@@ -14,7 +14,8 @@ class MadaraSource(private val scraper: WebPageScraper) {
 
     suspend fun search(site: Site, query: String): List<MangaSummary> {
         val url = "${site.baseUrl.trimEnd('/')}/?s=${URLEncoder.encode(query, "UTF-8")}&post_type=wp-manga"
-        val json = JSONObject(scraper.scrape(url, SEARCH_STATE_JS, SEARCH_EXTRACT_JS))
+        // Recherche : délai court, un site lent ne doit pas faire attendre les autres résultats.
+        val json = JSONObject(scraper.scrape(url, SEARCH_STATE_JS, SEARCH_EXTRACT_JS, timeoutMs = SEARCH_TIMEOUT_MS))
         return json.getJSONArray("items").objects().mapNotNull { item ->
             val href = item.optStringOrNull("u") ?: return@mapNotNull null
             MangaSummary(
@@ -60,8 +61,17 @@ class MadaraSource(private val scraper: WebPageScraper) {
             Site("ManhwaTop", "https://manhwatop.com"),
             Site("MangaRead", "https://www.mangaread.org"),
             Site("Manhuaus", "https://manhuaus.com"),
-            Site("ManhwaClan", "https://manhwaclan.com"),
+            Site("ZinManga", "https://www.zinmanga.net"),
+            Site("MangaClash", "https://mangaclash.com"),
+            Site("CoffeeManga", "https://coffeemanga.io"),
+            Site("S2Manga", "https://s2manga.com"),
+            Site("ReadManhua", "https://www.readmanhua.net"),
         )
+
+        /** Sites retirés de la liste par défaut (injoignables) : enlevés aussi des listes déjà enregistrées. */
+        val REMOVED_SITES = setOf("https://manhwaclan.com")
+
+        private const val SEARCH_TIMEOUT_MS = 15_000L
 
         // Fonctions JS partagées : page bloquée par Cloudflare et URL d'image (chargement différé).
         private const val HELPERS = """
