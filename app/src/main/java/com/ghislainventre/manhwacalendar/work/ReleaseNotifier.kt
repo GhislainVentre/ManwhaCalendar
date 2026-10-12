@@ -43,6 +43,7 @@ object ReleaseNotifier {
         val label = chapter.number?.let { "Chapitre $it" } ?: "Nouveau chapitre"
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
+            .setColor(0xFFFF6F91.toInt())
             .setContentTitle(event.series.title)
             .setContentText("$label disponible (${chapter.language.uppercase()})")
             .setContentIntent(open)
