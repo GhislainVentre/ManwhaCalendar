@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Silhouette du 만 de l'icône de l'app, recadrée pour la barre d'état. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M6,2h12a2,2 0,0 1,2 2v18l-8,-4l-8,4v-18a2,2 0,0 1,2 -2z" />
+    android:viewportWidth="56"
+    android:viewportHeight="56">
+    <group
+        android:translateX="-26"
+        android:translateY="-26">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M55.13,32.51L55.02,32.21L54.76,31.89L54.40,31.70L54.09,31.65L35.36,31.65L34.96,31.73L34.61,31.96L34.38,32.31L34.30,32.71L34.30,51.44L34.38,51.84L34.61,52.19L34.96,52.42L35.36,52.50L54.09,52.50L54.49,52.42L54.84,52.19L55.07,51.84L55.15,51.44ZM39.60,47.20L39.60,36.95L49.85,36.95L49.85,47.20ZM72.28,40.84L66.45,40.84L66.45,30.06L61.15,30.06L61.15,56.91L66.45,56.91L66.45,46.14L72.28,46.14ZM41.02,72.64L41.02,58.33L35.72,58.33L35.72,77.94L73.70,77.94L73.70,72.64Z" />
+    </group>
 </vector>
