@@ -107,7 +107,7 @@ fun SeriesDetailScreen(
             }
         }
         item(key = "chapters-title") {
-            SectionTitle("Chapitres") {
+            SectionTitle(if (series.recentChapters.size > 1) "Chapitres (${series.recentChapters.size})" else "Chapitres") {
                 val unread = series.unreadCount
                 if (series.recentChapters.isNotEmpty() && unread != 0) {
                     TextButton(onClick = onMarkAllRead) { Text("Tout marquer lu") }
