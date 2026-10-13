@@ -65,15 +65,27 @@ class MangaDexApi {
         return get("/manga", params).getJSONArray("data").objects().map(::parseManga)
     }
 
-    /** Derniers chapitres traduits, du plus récent au plus ancien. */
-    suspend fun latestChapters(mangaId: String, languages: List<String>, limit: Int = 60): List<Chapter> {
-        val params = mutableListOf(
-            "limit" to limit.toString(),
-            "order[readableAt]" to "desc",
-        )
-        languages.forEach { params += "translatedLanguage[]" to it }
-        val json = get("/manga/$mangaId/feed", params)
-        return json.getJSONArray("data").objects().mapNotNull(::parseChapter)
+    /**
+     * Tous les chapitres traduits (jusqu'à [max]), du plus récent au plus ancien, par pages de 500 :
+     * il faut toute la liste pour qui commence une série.
+     */
+    suspend fun latestChapters(mangaId: String, languages: List<String>, max: Int = 2000): List<Chapter> {
+        val chapters = mutableListOf<Chapter>()
+        var offset = 0
+        while (offset < max) {
+            val params = mutableListOf(
+                "limit" to FEED_PAGE.toString(),
+                "offset" to offset.toString(),
+                "order[readableAt]" to "desc",
+            )
+            languages.forEach { params += "translatedLanguage[]" to it }
+            val json = get("/manga/$mangaId/feed", params)
+            val page = json.getJSONArray("data").objects()
+            chapters += page.mapNotNull(::parseChapter)
+            offset += FEED_PAGE
+            if (page.size < FEED_PAGE || offset >= json.optInt("total")) break
+        }
+        return chapters
     }
 
     private fun parseManga(obj: JSONObject): MangaSummary {
@@ -148,6 +160,7 @@ class MangaDexApi {
     private companion object {
         const val BASE_URL = "https://api.mangadex.org"
         const val USER_AGENT = "ManhwaCalendar/1.0 (Android)"
+        const val FEED_PAGE = 500
     }
 }
 

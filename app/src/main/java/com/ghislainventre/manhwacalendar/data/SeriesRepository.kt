@@ -287,14 +287,53 @@ class SeriesRepository(
 
     // --- Persistance JSON dans les SharedPreferences ---
 
+    // Les chapitres de chaque série ont leur propre clé, réécrite seulement quand la liste change :
+    // cocher « lu » ne réécrit que la petite fiche des séries, même avec des centaines de chapitres.
+
+    /** Dernière liste de chapitres enregistrée pour chaque série. */
+    private val savedChapters = mutableMapOf<String, List<Chapter>>()
+
     private fun load(): List<FollowedSeries> = runCatching {
-        JSONArray(prefs.getString(KEY_FOLLOWED, "[]")).objects().map { it.toSeries() }
+        JSONArray(prefs.getString(KEY_FOLLOWED, "[]")).objects().map { json ->
+            // Les anciennes versions gardaient les chapitres dans la fiche de la série.
+            val chapters = json.optJSONArray("chapters")
+                ?: prefs.getString(chaptersKey(json.getString("id")), null)?.let(::JSONArray)
+            json.toSeries(chapters)
+        }
     }.getOrDefault(emptyList())
 
+    @Synchronized
     private fun save(list: List<FollowedSeries>) {
+        val edit = prefs.edit()
         val array = JSONArray()
-        list.forEach { array.put(it.toJson()) }
-        prefs.edit().putString(KEY_FOLLOWED, array.toString()).apply()
+        list.forEach { series ->
+            array.put(series.toJson())
+            if (savedChapters[series.id] !== series.recentChapters) {
+                edit.putString(chaptersKey(series.id), series.recentChapters.toJson().toString())
+                savedChapters[series.id] = series.recentChapters
+            }
+        }
+        // Chapitres des séries retirées.
+        val keep = list.map { chaptersKey(it.id) }.toSet()
+        prefs.all.keys.filter { it.startsWith(CHAPTERS_PREFIX) && it !in keep }.forEach(edit::remove)
+        savedChapters.keys.retainAll(list.map { it.id }.toSet())
+        edit.putString(KEY_FOLLOWED, array.toString()).apply()
+    }
+
+    private fun chaptersKey(seriesId: String) = CHAPTERS_PREFIX + seriesId
+
+    private fun List<Chapter>.toJson() = JSONArray().apply {
+        forEach { c ->
+            put(JSONObject().apply {
+                put("id", c.id)
+                putOpt("number", c.number)
+                putOpt("title", c.title)
+                put("language", c.language)
+                put("readableAt", c.readableAt.toEpochMilli())
+                // Sur les sites web, l'adresse est déjà l'identifiant.
+                if (c.externalUrl != c.id) putOpt("externalUrl", c.externalUrl)
+            })
+        }
     }
 
     private fun FollowedSeries.toJson() = JSONObject().apply {
@@ -311,33 +350,21 @@ class SeriesRepository(
         putOpt("siteName", siteName)
         putOpt("lastReadNumber", lastReadNumber)
         putOpt("lastReadId", lastReadId)
-        put("chapters", JSONArray().apply {
-            recentChapters.forEach { c ->
-                put(JSONObject().apply {
-                    put("id", c.id)
-                    putOpt("number", c.number)
-                    putOpt("title", c.title)
-                    put("language", c.language)
-                    put("readableAt", c.readableAt.toEpochMilli())
-                    putOpt("externalUrl", c.externalUrl)
-                })
-            }
-        })
     }
 
-    private fun JSONObject.toSeries() = FollowedSeries(
+    private fun JSONObject.toSeries(chapters: JSONArray?) = FollowedSeries(
         id = getString("id"),
         title = getString("title"),
         coverUrl = optStringOrNull("coverUrl"),
         status = optStringOrNull("status"),
-        recentChapters = optJSONArray("chapters")?.objects().orEmpty().map { c ->
+        recentChapters = chapters?.objects().orEmpty().map { c ->
             Chapter(
                 id = c.getString("id"),
                 number = c.optStringOrNull("number"),
                 title = c.optStringOrNull("title"),
                 language = c.optString("language"),
                 readableAt = Instant.ofEpochMilli(c.getLong("readableAt")),
-                externalUrl = c.optStringOrNull("externalUrl"),
+                externalUrl = c.optStringOrNull("externalUrl") ?: c.getString("id").takeIf { it.startsWith("http") },
             )
         }.sortedWith(Chapter.NEWEST_FIRST),
         nextEstimate = optEpoch("nextEstimate"),
@@ -385,13 +412,15 @@ class SeriesRepository(
     private companion object {
         const val KEY_FOLLOWED = "followed"
         const val KEY_LANGUAGE = "language"
+        const val CHAPTERS_PREFIX = "chapters_"
         const val KEY_SITES = "sites"
         const val KEY_SITES_VERSION = "sites_version"
         /** À augmenter quand la liste des sites par défaut change. */
         const val SITES_VERSION = 1
         const val MAX_SITE_FAILURES = 2
         const val MANGADEX_NAME = "MangaDex"
-        const val MAX_STORED_CHAPTERS = 15
+        /** Toute la série, pour qui la commence ; la limite ne sert qu'aux séries démesurées. */
+        const val MAX_STORED_CHAPTERS = 1500
         const val MAX_WEB_LOOKUPS = 15
         const val MAX_WEB_PAGES = 3
         val STALE_AFTER: Duration = Duration.ofDays(30)

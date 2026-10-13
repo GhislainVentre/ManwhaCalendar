@@ -37,6 +37,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -64,6 +68,7 @@ fun SeriesDetailScreen(
     onSetRead: (Chapter, Boolean) -> Unit,
     onMarkAllRead: () -> Unit,
 ) {
+    var showOldRead by rememberSaveable(series.id) { mutableStateOf(false) }
     LazyColumn(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = WindowInsets.navigationBars.asPaddingValues(),
@@ -107,7 +112,7 @@ fun SeriesDetailScreen(
             }
         }
         item(key = "chapters-title") {
-            SectionTitle("Chapitres") {
+            SectionTitle(if (series.recentChapters.size > 1) "Chapitres (${series.recentChapters.size})" else "Chapitres") {
                 val unread = series.unreadCount
                 if (series.recentChapters.isNotEmpty() && unread != 0) {
                     TextButton(onClick = onMarkAllRead) { Text("Tout marquer lu") }
@@ -131,9 +136,26 @@ fun SeriesDetailScreen(
                 )
             }
         }
-        items(series.recentChapters, key = { it.id }) { c ->
-            val read = series.isRead(c)
-            ChapterRow(c, read, onClick = { onOpenUrl(c.url) }, onToggleRead = { onSetRead(c, !read) })
+        // Une fois lus, seuls les 2 derniers chapitres lus restent visibles ; les plus anciens sont repliés.
+        val read = series.recentChapters.filter { series.isRead(it) }
+        val hidden = read.drop(VISIBLE_READ).toSet()
+        val shown = if (showOldRead) series.recentChapters else series.recentChapters.filterNot { it in hidden }
+        items(shown, key = { it.id }) { c ->
+            val isRead = series.isRead(c)
+            ChapterRow(c, isRead, onClick = { onOpenUrl(c.url) }, onToggleRead = { onSetRead(c, !isRead) })
+        }
+        if (hidden.isNotEmpty()) {
+            item(key = "old-read") {
+                TextButton(
+                    onClick = { showOldRead = !showOldRead },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        if (showOldRead) "Masquer les chapitres déjà lus"
+                        else "Voir les ${hidden.size} chapitres lus plus anciens"
+                    )
+                }
+            }
         }
     }
 }
@@ -298,3 +320,6 @@ private fun ReadToggle(read: Boolean, onToggle: () -> Unit) {
         }
     }
 }
+
+/** Chapitres lus encore affichés sous les non lus, avant le bouton qui déplie les autres. */
+private const val VISIBLE_READ = 2
