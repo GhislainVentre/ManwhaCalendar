@@ -2,6 +2,7 @@ package com.ghislainventre.manhwacalendar.ui
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,7 +54,7 @@ fun UpdateDialog(vm: MainViewModel) {
     )
 }
 
-/** Petit formulaire de retour : le texte part par l'appli de messagerie choisie (SMS, WhatsApp, mail…). */
+/** Petit formulaire de retour : le texte part par mail à Ghislain, depuis l'appli mail du téléphone. */
 @Composable
 fun FeedbackDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -63,7 +64,7 @@ fun FeedbackDialog(onDismiss: () -> Unit) {
         title = { Text("Envoyer un retour") },
         text = {
             Column {
-                Text("Un bug, une idée, un site qui ne marche pas ? Écris-le ici, puis choisis comment l'envoyer.")
+                Text("Un bug, une idée, un site qui ne marche pas ? Écris-le ici, ton appli mail s'ouvrira avec le message prêt à partir.")
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = text,
@@ -86,11 +87,22 @@ fun FeedbackDialog(onDismiss: () -> Unit) {
     )
 }
 
+/** Les retours arrivent par mail chez Ghislain ; le préfixe du sujet sert au filtre Gmail. */
+private const val FEEDBACK_ADDRESS = "ghislain.ventre@gmail.com"
+private const val FEEDBACK_SUBJECT = "[Manhwa Calendar] Retour"
+
 private fun Context.shareFeedback(text: String) {
     val body = "$text\n\n— ${AppUpdater.deviceSummary(this)}"
-    val send = Intent(Intent.ACTION_SEND)
-        .setType("text/plain")
-        .putExtra(Intent.EXTRA_SUBJECT, "Retour sur Manhwa Calendar")
+    val mail = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+        .putExtra(Intent.EXTRA_EMAIL, arrayOf(FEEDBACK_ADDRESS))
+        .putExtra(Intent.EXTRA_SUBJECT, FEEDBACK_SUBJECT)
         .putExtra(Intent.EXTRA_TEXT, body)
-    runCatching { startActivity(Intent.createChooser(send, "Envoyer le retour avec…")) }
+    // Sans appli mail, on passe par le menu de partage avec l'adresse dans le texte.
+    val share = Intent(Intent.ACTION_SEND)
+        .setType("text/plain")
+        .putExtra(Intent.EXTRA_EMAIL, arrayOf(FEEDBACK_ADDRESS))
+        .putExtra(Intent.EXTRA_SUBJECT, FEEDBACK_SUBJECT)
+        .putExtra(Intent.EXTRA_TEXT, "À envoyer à $FEEDBACK_ADDRESS\n\n$body")
+    runCatching { startActivity(mail) }
+        .recoverCatching { startActivity(Intent.createChooser(share, "Envoyer le retour avec…")) }
 }
