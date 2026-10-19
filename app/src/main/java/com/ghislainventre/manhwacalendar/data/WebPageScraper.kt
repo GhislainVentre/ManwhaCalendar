@@ -84,6 +84,6 @@ class WebPageScraper(context: Context) {
 
     private companion object {
         const val GRACE_TICKS = 8
-        const val MAX_PARALLEL_PAGES = 6
+        const val MAX_PARALLEL_PAGES = 8
     }
 }

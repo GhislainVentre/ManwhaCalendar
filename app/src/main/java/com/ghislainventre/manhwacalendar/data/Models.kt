@@ -71,6 +71,8 @@ data class FollowedSeries(
     val lastReadNumber: Double? = null,
     /** Identifiant du dernier chapitre marqué comme lu, pour les chapitres sans numéro. */
     val lastReadId: String? = null,
+    /** Marqué « terminé » par l'utilisateur : plus vérifié, rangé à part et absent de l'agenda. */
+    val done: Boolean = false,
 ) {
     val sourceLabel: String get() = siteName ?: "MangaDex"
     val latestChapter: Chapter? get() = recentChapters.firstOrNull()

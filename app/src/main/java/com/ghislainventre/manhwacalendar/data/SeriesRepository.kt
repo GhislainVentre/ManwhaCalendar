@@ -146,6 +146,10 @@ class SeriesRepository(
 
     fun markAllRead(id: String) = mutate { list -> list.map { if (it.id == id) it.withAllRead() else it } }
 
+    /** Range la série dans les terminées (plus de vérification ni de notification), ou la remet en cours. */
+    fun setDone(id: String, done: Boolean) =
+        mutate { list -> list.map { if (it.id == id) it.copy(done = done, hasNew = it.hasNew && !done) else it } }
+
     fun markAllSeen() = mutate { list -> list.map { it.copy(hasNew = false) } }
 
     fun setLanguage(language: ChapterLanguage) {
@@ -157,7 +161,7 @@ class SeriesRepository(
     suspend fun refreshAll(): List<NewChapterEvent> = refreshMutex.withLock {
         val events = mutableListOf<NewChapterEvent>()
         var lastError: Exception? = null
-        for (series in _followed.value) {
+        for (series in _followed.value.filterNot { it.done }) {
             try {
                 refreshOne(series, notifyNew = true)?.let(events::add)
             } catch (e: CancellationException) {
@@ -167,7 +171,7 @@ class SeriesRepository(
             }
             delay(250) // limite de débit de l'API MangaDex
         }
-        if (events.isEmpty() && lastError != null && _followed.value.isNotEmpty()) throw lastError
+        if (events.isEmpty() && lastError != null && _followed.value.any { !it.done }) throw lastError
         events
     }
 
@@ -350,6 +354,7 @@ class SeriesRepository(
         putOpt("siteName", siteName)
         putOpt("lastReadNumber", lastReadNumber)
         putOpt("lastReadId", lastReadId)
+        if (done) put("done", true)
     }
 
     private fun JSONObject.toSeries(chapters: JSONArray?) = FollowedSeries(
@@ -379,6 +384,7 @@ class SeriesRepository(
         siteName = optStringOrNull("siteName") ?: if (optString("source") == "TOONGOD") "ToonGod" else null,
         lastReadNumber = if (has("lastReadNumber")) optDouble("lastReadNumber") else null,
         lastReadId = optStringOrNull("lastReadId"),
+        done = optBoolean("done"),
     )
 
     private fun loadSites(): List<Site> {
@@ -416,7 +422,7 @@ class SeriesRepository(
         const val KEY_SITES = "sites"
         const val KEY_SITES_VERSION = "sites_version"
         /** À augmenter quand la liste des sites par défaut change. */
-        const val SITES_VERSION = 1
+        const val SITES_VERSION = 2
         const val MAX_SITE_FAILURES = 2
         const val MANGADEX_NAME = "MangaDex"
         /** Toute la série, pour qui la commence ; la limite ne sert qu'aux séries démesurées. */

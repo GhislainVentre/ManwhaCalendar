@@ -38,6 +38,8 @@ class MadaraSource(private val scraper: WebPageScraper) {
         // Les chapitres sont listés du plus récent au plus ancien. Une date illisible (format inconnu,
         // badge « NEW » sans texte) reprend celle du chapitre plus récent au lieu de faire disparaître le chapitre.
         var newerDate = Instant.now()
+        val host = runCatching { java.net.URI(pageUrl).host }.getOrNull()?.removePrefix("www.")
+        val language = if (host in FRENCH_HOSTS) "fr" else "en"
         val chapters = json.getJSONArray("ch").objects().mapNotNull { c ->
             val href = c.optStringOrNull("u") ?: return@mapNotNull null
             val label = c.optString("n").trim()
@@ -47,7 +49,7 @@ class MadaraSource(private val scraper: WebPageScraper) {
                 id = href,
                 number = MadaraDates.chapterNumber(label),
                 title = MadaraDates.chapterTitle(label),
-                language = "en",
+                language = language,
                 readableAt = date,
                 externalUrl = href,
             )
@@ -63,13 +65,30 @@ class MadaraSource(private val scraper: WebPageScraper) {
             Site("Manhuaus", "https://manhuaus.com"),
             Site("ZinManga", "https://www.zinmanga.net"),
             Site("MangaClash", "https://mangaclash.com"),
-            Site("CoffeeManga", "https://coffeemanga.io"),
+            Site("CoffeeManga", "https://coffeemanga.moe"),
             Site("S2Manga", "https://s2manga.com"),
-            Site("ReadManhua", "https://www.readmanhua.net"),
+            Site("ManhuaPlus", "https://manhuaplus.com"),
+            Site("TopManhua", "https://www.topmanhua.fan"),
+            Site("Toonily", "https://toonily.com"),
+            Site("KunManga", "https://kunmanga.com"),
+            Site("ManhuaFast", "https://manhuafast.com"),
+            Site("Webtoon.xyz", "https://www.webtoon.xyz"),
+            Site("1stKissManga", "https://1stkissmanga.me"),
+            Site("MangaWeebs", "https://mangaweebs.org"),
+            Site("Manhuaga", "https://manhuaga.com"),
+            Site("Manga68", "https://manga68.com"),
+            // Sites en français.
+            Site("Scantrad Union", "https://scantrad-union.com"),
+            Site("Mangas Origines", "https://mangas-origines.fr"),
+            Site("Manga Scantrad", "https://manga-scantrad.io"),
+            Site("Astral Manga", "https://astral-manga.fr"),
         )
 
-        /** Sites retirés de la liste par défaut (injoignables) : enlevés aussi des listes déjà enregistrées. */
-        val REMOVED_SITES = setOf("https://manhwaclan.com")
+        /** Sites dont les chapitres sont en français ; les autres publient en anglais. */
+        private val FRENCH_HOSTS = setOf("scantrad-union.com", "mangas-origines.fr", "manga-scantrad.io", "astral-manga.fr")
+
+        /** Sites retirés de la liste par défaut (injoignables, ou déménagés) : enlevés aussi des listes déjà enregistrées. */
+        val REMOVED_SITES = setOf("https://manhwaclan.com", "https://www.readmanhua.net", "https://coffeemanga.io")
 
         private const val SEARCH_TIMEOUT_MS = 15_000L
 

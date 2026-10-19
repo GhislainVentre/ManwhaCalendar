@@ -64,6 +64,8 @@ fun AgendaScreen(
     onSearch: () -> Unit,
 ) {
     val today = LocalDate.now()
+    // Les séries terminées n'ont plus rien à annoncer : elles restent dans « Mes séries » seulement.
+    val followed = followed.filterNot { it.done }
     // Toutes les séries suivies : les nouveautés d'abord, puis les plus récemment sorties.
     val mine = followed
         .sortedWith(compareByDescending<FollowedSeries> { it.hasNew }.thenByDescending { it.latestChapter?.readableAt })
@@ -241,10 +243,13 @@ private fun SeriesTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit)
             else if (series.isUpToDate) UpToDateBadge(Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         Spacer(Modifier.height(8.dp))
+        // Toujours deux lignes : sans cela la rangée change de hauteur pendant le défilement horizontal
+        // (titres sur une ou deux lignes) et tout l'agenda en dessous saute.
         Text(
             series.title,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
