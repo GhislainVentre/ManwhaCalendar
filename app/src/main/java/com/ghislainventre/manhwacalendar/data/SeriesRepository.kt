@@ -117,11 +117,13 @@ class SeriesRepository(
         return Recommender.rank(candidates, profile, exclude)
     }
 
-    suspend fun follow(manga: MangaSummary) {
+    /** Suit [manga] ; [alternates] : la même série sur d'autres sites, utilisés si celui-ci ne répond plus. */
+    suspend fun follow(manga: MangaSummary, alternates: List<MangaSummary> = emptyList()) {
         if (isFollowed(manga.id)) return
         val series = FollowedSeries(
             manga.id, manga.title, manga.coverUrl, manga.status,
             source = manga.source, pageUrl = manga.pageUrl, siteName = manga.siteName,
+            alternates = alternates.mapNotNull { a -> a.pageUrl?.let { Mirror(a.sourceLabel, it) } },
         )
         mutate { it + series }
         try {
@@ -191,8 +193,8 @@ class SeriesRepository(
                 }
             }
             Source.WEB -> {
-                val page = madara.series(series.url)
-                Fetched(page.title, page.coverUrl, null, page.chapters.sortedByDescending { it.readableAt })
+                val (page, mirror) = loadWebPage(series)
+                Fetched(page.title, page.coverUrl, null, page.chapters.sortedByDescending { it.readableAt }, mirror = mirror)
             }
         }
         val chapters = fetched.chapters
@@ -203,14 +205,24 @@ class SeriesRepository(
         val previous = series.latestChapter
         val latest = sorted.firstOrNull()
         // Comparaison par identifiant : les dates relatives (« 2 hours ago ») bougent à chaque lecture.
+        // Par numéro quand il est connu : après un changement de site, le même chapitre a une autre adresse.
+        val latestN = latest?.number?.toDoubleOrNull()
+        val previousN = previous?.number?.toDoubleOrNull()
         val isNew = previous != null && latest != null && latest.id != previous.id &&
-            !latest.readableAt.isBefore(previous.readableAt)
+            (if (latestN != null && previousN != null) latestN > previousN else !latest.readableAt.isBefore(previous.readableAt))
 
-        val updated = (_followed.value.firstOrNull { it.id == series.id } ?: return null).copy(
+        val current = _followed.value.firstOrNull { it.id == series.id } ?: return null
+        val updated = current.copy(
             title = fetched.title ?: series.title,
             source = if (fetched.web != null) Source.WEB else series.source,
-            pageUrl = fetched.web?.pageUrl ?: series.pageUrl,
-            siteName = fetched.web?.site?.name ?: series.siteName,
+            pageUrl = fetched.web?.pageUrl ?: fetched.mirror?.url ?: series.pageUrl,
+            siteName = fetched.web?.site?.name ?: fetched.mirror?.siteName ?: series.siteName,
+            alternates = when {
+                fetched.web != null -> fetched.web.alternates
+                // Le site en panne passe en dernier secours : il reviendra peut-être.
+                fetched.mirror != null -> current.alternates - fetched.mirror + Mirror(series.sourceLabel, series.url)
+                else -> current.alternates
+            },
             coverUrl = fetched.coverUrl ?: series.coverUrl,
             status = status,
             recentChapters = sorted.distinctBy { it.number ?: it.id }.take(MAX_STORED_CHAPTERS),
@@ -229,9 +241,37 @@ class SeriesRepository(
         val status: String?,
         val chapters: List<Chapter>,
         val web: WebMatch? = null,
+        /** Site de secours utilisé parce que le site principal ne répondait plus. */
+        val mirror: Mirror? = null,
     )
 
-    private class WebMatch(val site: Site, val pageUrl: String, val page: MadaraSource.SeriesPage)
+    private class WebMatch(
+        val site: Site,
+        val pageUrl: String,
+        val page: MadaraSource.SeriesPage,
+        val alternates: List<Mirror>,
+    )
+
+    /** Page de la série sur son site, ou sur le premier site de secours qui répond. */
+    private suspend fun loadWebPage(series: FollowedSeries): Pair<MadaraSource.SeriesPage, Mirror?> {
+        val failure = try {
+            return madara.series(series.url) to null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e
+        }
+        for (mirror in series.alternates) {
+            try {
+                return madara.series(mirror.url) to mirror
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Site suivant.
+            }
+        }
+        throw failure
+    }
 
     /** Aucun chapitre dans les langues choisies, ou plus rien depuis longtemps sur une série en cours. */
     private fun looksAbandoned(chapters: List<Chapter>, status: String?): Boolean {
@@ -271,7 +311,10 @@ class SeriesRepository(
                 continue
             }
             val top = page.chapters.maxOfOrNull { it.number?.toDoubleOrNull() ?: -1.0 } ?: continue
-            if (top > knownTop) return WebMatch(site, url, page)
+            if (top > knownTop) {
+                val others = hits.filter { it.second != url }.map { (s, u) -> Mirror(s.name, u) }
+                return WebMatch(site, url, page, others)
+            }
         }
         return null
     }
@@ -355,6 +398,11 @@ class SeriesRepository(
         putOpt("lastReadNumber", lastReadNumber)
         putOpt("lastReadId", lastReadId)
         if (done) put("done", true)
+        if (alternates.isNotEmpty()) {
+            put("alternates", JSONArray().apply {
+                alternates.forEach { put(JSONObject().put("site", it.siteName).put("url", it.url)) }
+            })
+        }
     }
 
     private fun JSONObject.toSeries(chapters: JSONArray?) = FollowedSeries(
@@ -385,6 +433,7 @@ class SeriesRepository(
         lastReadNumber = if (has("lastReadNumber")) optDouble("lastReadNumber") else null,
         lastReadId = optStringOrNull("lastReadId"),
         done = optBoolean("done"),
+        alternates = optJSONArray("alternates")?.objects().orEmpty().map { Mirror(it.getString("site"), it.getString("url")) },
     )
 
     private fun loadSites(): List<Site> {

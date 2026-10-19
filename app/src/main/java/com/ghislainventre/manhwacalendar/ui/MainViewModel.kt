@@ -12,6 +12,8 @@ import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Recommendation
+import com.ghislainventre.manhwacalendar.data.SearchGrouping
+import com.ghislainventre.manhwacalendar.data.SeriesGroup
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -35,6 +37,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var siteResults by mutableStateOf<List<SiteResult>>(emptyList())
         private set
     val searching: Boolean get() = siteResults.any { it.loading }
+    /** Chaque série une seule fois, tous sites confondus, avec le meilleur site déjà choisi. */
+    val seriesResults: List<SeriesGroup>
+        get() = SearchGrouping.group(siteResults.filter { !it.loading && it.error == null }.map { it.items to it.elapsedMs })
     private var searchJob: Job? = null
 
     var recommendations by mutableStateOf<List<Recommendation>>(emptyList())
@@ -96,8 +101,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         searchJob = viewModelScope.launch {
             sources.forEach { source ->
                 launch {
+                    val start = System.currentTimeMillis()
                     val result = try {
-                        SiteResult(source.name, loading = false, items = source.search(q))
+                        val items = source.search(q)
+                        SiteResult(source.name, loading = false, items = items, elapsedMs = System.currentTimeMillis() - start)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -140,6 +147,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun removeSite(name: String) = repository.removeSite(name)
+
+    /** Suit la série sur son meilleur site, en gardant les autres en secours. */
+    fun follow(group: SeriesGroup) {
+        message = UiMessage("${group.title} ajouté à tes séries (${group.best.sourceLabel})")
+        viewModelScope.launch {
+            repository.follow(group.best, group.alternates)
+        }
+    }
 
     fun follow(manga: MangaSummary) {
         message = UiMessage("${manga.title} ajouté à tes séries")
@@ -190,4 +205,5 @@ data class SiteResult(
     val loading: Boolean = true,
     val items: List<MangaSummary> = emptyList(),
     val error: String? = null,
+    val elapsedMs: Long = 0,
 )
