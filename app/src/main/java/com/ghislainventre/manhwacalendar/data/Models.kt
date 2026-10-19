@@ -8,6 +8,9 @@ enum class Source { MANGADEX, WEB }
 /** Site de lecture interrogé par la recherche. */
 data class Site(val name: String, val baseUrl: String, val enabled: Boolean = true)
 
+/** Page d'une série sur un autre site, gardée en secours si le site principal tombe en panne. */
+data class Mirror(val siteName: String, val url: String)
+
 /** Résultat de recherche. Pour un site web, [pageUrl] est la page de la série. */
 data class MangaSummary(
     val id: String,
@@ -73,6 +76,8 @@ data class FollowedSeries(
     val lastReadId: String? = null,
     /** Marqué « terminé » par l'utilisateur : plus vérifié, rangé à part et absent de l'agenda. */
     val done: Boolean = false,
+    /** La même série sur d'autres sites, du meilleur au moins bon. */
+    val alternates: List<Mirror> = emptyList(),
 ) {
     val sourceLabel: String get() = siteName ?: "MangaDex"
     val latestChapter: Chapter? get() = recentChapters.firstOrNull()

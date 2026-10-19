@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
+import com.ghislainventre.manhwacalendar.data.TitleMatch
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     AGENDA("Agenda", Icons.Default.DateRange),
@@ -155,7 +156,11 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
                             onMarkAllSeen = vm::markAllSeen,
                         )
                         "tab:${Tab.SEARCH.name}" -> SearchScreen(
-                            vm, followed.map { it.id }.toSet(), sites, onSettings = { showSettings = true },
+                            vm,
+                            followed.map { it.id }.toSet(),
+                            followed.map { TitleMatch.normalize(it.title) }.toSet(),
+                            sites,
+                            onSettings = { showSettings = true },
                         )
                         else -> followed.firstOrNull { "series:${it.id}" == screen }?.let { series ->
                             SeriesDetailScreen(

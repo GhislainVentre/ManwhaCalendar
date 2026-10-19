@@ -46,9 +46,16 @@ import androidx.compose.ui.unit.dp
 import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Site
 import com.ghislainventre.manhwacalendar.data.Source
+import com.ghislainventre.manhwacalendar.data.TitleMatch
 
 @Composable
-fun SearchScreen(vm: MainViewModel, followedIds: Set<String>, sites: List<Site>, onSettings: () -> Unit) {
+fun SearchScreen(
+    vm: MainViewModel,
+    followedIds: Set<String>,
+    followedTitles: Set<String>,
+    sites: List<Site>,
+    onSettings: () -> Unit,
+) {
     val focus = LocalFocusManager.current
     LaunchedEffect(Unit) { vm.loadRecommendations() }
     val search = {
@@ -103,10 +110,23 @@ fun SearchScreen(vm: MainViewModel, followedIds: Set<String>, sites: List<Site>,
             }
             recommendationItems(vm, followedIds)
         }
-        vm.siteResults.forEach { result ->
-            item(key = "site-${result.site}") { SiteHeader(result) }
-            items(result.items, key = { "${result.site}-${it.id}" }) { manga ->
-                SearchResultRow(manga, followed = manga.id in followedIds, onFollow = { vm.follow(manga) })
+        if (vm.siteResults.isNotEmpty()) {
+            val groups = vm.seriesResults
+            item(key = "progress") { SearchProgress(vm.siteResults, empty = groups.isEmpty()) }
+            // Une ligne par série : l'appli choisit elle-même le site qui a le plus de chapitres, puis le plus rapide.
+            items(groups, key = { "series-${it.key}" }) { group ->
+                val followed = group.hits.any { it.manga.id in followedIds } ||
+                    TitleMatch.normalize(group.title) in followedTitles
+                SearchResultRow(
+                    group.best.copy(coverUrl = group.coverUrl),
+                    followed = followed,
+                    onFollow = { vm.follow(group) },
+                    reason = if (group.hits.size > 1) {
+                        "Sur ${group.hits.size} sites · lu sur ${group.best.sourceLabel}"
+                    } else {
+                        "Sur ${group.best.sourceLabel}"
+                    },
+                )
             }
         }
     }
@@ -155,32 +175,32 @@ private fun LazyListScope.recommendationItems(vm: MainViewModel, followedIds: Se
     }
 }
 
+/** Avancement de la recherche : combien de sites ont répondu, et combien sont en panne. */
 @Composable
-private fun SiteHeader(result: SiteResult) {
-    val colors = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(result.site, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            when {
-                result.loading -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                result.error != null -> Pill("Indisponible", colors.errorContainer, colors.onErrorContainer)
-                else -> Pill(result.items.size.toString(), colors.surfaceContainerHigh, colors.onSurfaceVariant)
-            }
+private fun SearchProgress(results: List<SiteResult>, empty: Boolean) {
+    val done = results.count { !it.loading }
+    val failed = results.count { it.error != null }
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val searching = done < results.size
+        if (searching) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
         }
-        val note = when {
-            result.error != null -> result.error
-            !result.loading && result.items.isEmpty() -> "Aucun résultat"
-            else -> null
-        }
-        if (note != null) {
-            Text(
-                note,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        Text(
+            listOfNotNull(
+                when {
+                    searching -> "Recherche sur ${results.size} sites… ($done/${results.size})"
+                    empty -> "Aucun résultat"
+                    else -> "Résultats de ${results.size - failed} sites"
+                },
+                failed.takeIf { it > 0 }?.let { plural(it, "site indisponible", "sites indisponibles") },
+            ).joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
