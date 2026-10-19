@@ -14,6 +14,7 @@ import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Recommendation
 import com.ghislainventre.manhwacalendar.data.SearchGrouping
 import com.ghislainventre.manhwacalendar.data.SeriesGroup
+import com.ghislainventre.manhwacalendar.update.AppUpdater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -21,6 +22,8 @@ import java.time.Duration
 import java.time.Instant
 
 private const val STARTUP_REFRESH_AFTER_MIN = 60L
+/** Après « Plus tard », on ne repropose la mise à jour qu'au bout de ce délai. */
+private const val UPDATE_SNOOZE_HOURS = 24L
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -55,7 +58,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Séries suivies et langue au moment du dernier calcul : on ne recalcule que s'ils ont changé. */
     private var recommendationsKey: Set<String>? = null
 
+    /** versionCode d'une version plus récente publiée sur GitHub, tant qu'elle est proposée. */
+    var availableUpdate by mutableStateOf<Long?>(null)
+        private set
+    /** Avancement du téléchargement (0..1) pendant qu'il a lieu, sinon null. */
+    var updateProgress by mutableStateOf<Float?>(null)
+        private set
+    private val updatePrefs = application.getSharedPreferences("app_update", android.content.Context.MODE_PRIVATE)
+
     init {
+        checkForUpdate()
         // À l'ouverture, seulement si la dernière vérification date : la tâche de fond vérifie déjà toutes les 6 h,
         // et une vérification complète à chaque lancement occupait le téléphone pendant les recherches.
         val stale = Instant.now().minus(Duration.ofMinutes(STARTUP_REFRESH_AFTER_MIN))
@@ -197,6 +209,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (language == this.language.value) return
         repository.setLanguage(language)
         refresh()
+    }
+
+    /** [userInitiated] : demandé depuis les réglages, on répond même quand l'appli est à jour. */
+    fun checkForUpdate(userInitiated: Boolean = false) {
+        val app = getApplication<Application>()
+        if (!userInitiated && System.currentTimeMillis() < updatePrefs.getLong("snoozed_until", 0)) return
+        viewModelScope.launch {
+            try {
+                val latest = AppUpdater.latestVersionCode()
+                when {
+                    latest != null && latest > AppUpdater.installedVersionCode(app) -> availableUpdate = latest
+                    userInitiated -> message = UiMessage("Tu as déjà la dernière version")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (userInitiated) message = UiMessage("Vérification impossible : ${e.message}")
+            }
+        }
+    }
+
+    fun postponeUpdate() {
+        availableUpdate = null
+        updatePrefs.edit().putLong("snoozed_until", System.currentTimeMillis() + UPDATE_SNOOZE_HOURS * 3_600_000).apply()
+    }
+
+    fun installUpdate() {
+        if (updateProgress != null) return
+        val app = getApplication<Application>()
+        updateProgress = 0f
+        viewModelScope.launch {
+            try {
+                val apk = AppUpdater.download(app) { updateProgress = it }
+                availableUpdate = null
+                AppUpdater.install(app, apk)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message = UiMessage("Téléchargement impossible : ${e.message}")
+            } finally {
+                updateProgress = null
+            }
+        }
     }
 
     fun consumeMessage() {

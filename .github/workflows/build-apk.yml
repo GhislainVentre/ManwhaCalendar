@@ -49,7 +49,10 @@ jobs:
         run: ./gradlew --no-daemon assembleRelease
 
       - name: Renommer l'APK
-        run: cp app/build/outputs/apk/release/app-release.apk ManhwaCalendar.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk ManhwaCalendar.apk
+          # L'appli lit ce numéro pour savoir si une version plus récente est publiée (même calcul que versionCode).
+          echo $((GITHUB_RUN_NUMBER + 100)) > version.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -66,4 +69,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           prerelease: false
           make_latest: true
-          files: ManhwaCalendar.apk
+          files: |
+            ManhwaCalendar.apk
+            version.txt
