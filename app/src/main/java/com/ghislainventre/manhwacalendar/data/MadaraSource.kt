@@ -6,7 +6,8 @@ import java.time.Instant
 
 /**
  * Lecture des sites de manhwa construits sur WordPress avec le thème « Madara »
- * (ToonGod, ManhwaTop, MangaRead…), via [WebPageScraper].
+ * (ToonGod, ManhwaTop, MangaRead…) ou « MangaReader » (Sushiscan, Lelmanga…), via [WebPageScraper].
+ * Les deux acceptent la même adresse de recherche ; l'extraction essaie l'un puis l'autre.
  */
 class MadaraSource(private val scraper: WebPageScraper) {
 
@@ -78,18 +79,29 @@ class MadaraSource(private val scraper: WebPageScraper) {
             Site("MangaWeebs", "https://mangaweebs.org"),
             Site("Manhuaga", "https://manhuaga.com"),
             Site("Manga68", "https://manga68.com"),
+            Site("Arenascans", "https://arenascan.com"),
             // Sites en français.
-            Site("Scantrad Union", "https://scantrad-union.com"),
+            Site("Sushiscan", "https://sushiscan.net"),
+            Site("Lelmanga", "https://www.lelmanga.com"),
+            Site("Pantheon Scan", "https://pantheon-scan.com"),
             Site("Mangas Origines", "https://mangas-origines.fr"),
             Site("Manga Scantrad", "https://manga-scantrad.io"),
             Site("Astral Manga", "https://astral-manga.fr"),
+            Site("ToonFR", "https://toonfr.com"),
         )
 
         /** Sites dont les chapitres sont en français ; les autres publient en anglais. */
-        private val FRENCH_HOSTS = setOf("scantrad-union.com", "mangas-origines.fr", "manga-scantrad.io", "astral-manga.fr")
+        private val FRENCH_HOSTS = setOf(
+            "sushiscan.net", "lelmanga.com", "pantheon-scan.com", "mangas-origines.fr",
+            "manga-scantrad.io", "astral-manga.fr", "toonfr.com",
+        )
 
         /** Sites retirés de la liste par défaut (injoignables, ou déménagés) : enlevés aussi des listes déjà enregistrées. */
-        val REMOVED_SITES = setOf("https://manhwaclan.com", "https://www.readmanhua.net", "https://coffeemanga.io")
+        val REMOVED_SITES = setOf(
+            "https://manhwaclan.com", "https://www.readmanhua.net", "https://coffeemanga.io",
+            // Pas un site WordPress : ses pages n'ont rien de lisible pour l'appli.
+            "https://scantrad-union.com",
+        )
 
         private const val SEARCH_TIMEOUT_MS = 15_000L
 
@@ -102,7 +114,7 @@ class MadaraSource(private val scraper: WebPageScraper) {
 
         private const val SEARCH_STATE_JS = """(function(){$HELPERS
             if(blocked()||document.readyState!=='complete')return 0;
-            return document.querySelector('.c-tabs-item__content, .search-wrap, .c-search-header__wrapper')?2:1;})()"""
+            return document.querySelector('.c-tabs-item__content, .search-wrap, .c-search-header__wrapper, .listupd')?2:1;})()"""
 
         private const val SEARCH_EXTRACT_JS = """(function(){$HELPERS
             var items=[];
@@ -110,11 +122,16 @@ class MadaraSource(private val scraper: WebPageScraper) {
               var a=el.querySelector('.post-title a');if(!a)return;
               items.push({u:a.href,t:txt(a),i:img(el.querySelector('img')),l:txt(el.querySelector('.latest-chap .chapter a'))});
             });
+            if(!items.length)document.querySelectorAll('.listupd .bsx').forEach(function(el){
+              var a=el.querySelector('a');if(!a||!a.href)return;
+              var t=txt(el.querySelector('.tt'))||a.getAttribute('title')||'';if(!t)return;
+              items.push({u:a.href,t:t,i:img(el.querySelector('img')),l:txt(el.querySelector('.epxs'))});
+            });
             return JSON.stringify({items:items});})()"""
 
         private const val SERIES_STATE_JS = """(function(){$HELPERS
             if(blocked()||document.readyState!=='complete')return 0;
-            return document.querySelectorAll('li.wp-manga-chapter').length>0?2:1;})()"""
+            return document.querySelectorAll('li.wp-manga-chapter, #chapterlist li').length>0?2:1;})()"""
 
         private const val SERIES_EXTRACT_JS = """(function(){$HELPERS
             var ch=[];
@@ -124,7 +141,11 @@ class MadaraSource(private val scraper: WebPageScraper) {
               if(d){var i=d.querySelector('i');var n=d.querySelector('a[title]');date=i?txt(i):(n?n.getAttribute('title'):txt(d));}
               ch.push({u:a.href,n:txt(a),d:date});
             });
-            return JSON.stringify({title:txt(document.querySelector('.post-title h1, .post-title h3')),
-              cover:img(document.querySelector('.summary_image img')),ch:ch});})()"""
+            if(!ch.length)document.querySelectorAll('#chapterlist li').forEach(function(li){
+              var a=li.querySelector('a');if(!a)return;
+              ch.push({u:a.href,n:txt(li.querySelector('.chapternum'))||txt(a),d:txt(li.querySelector('.chapterdate'))});
+            });
+            return JSON.stringify({title:txt(document.querySelector('.post-title h1, .post-title h3, h1.entry-title')),
+              cover:img(document.querySelector('.summary_image img, .thumb img')),ch:ch});})()"""
     }
 }
