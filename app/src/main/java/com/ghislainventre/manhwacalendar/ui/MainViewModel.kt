@@ -158,6 +158,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun markAllSeen() = repository.markAllSeen()
 
+    fun setDone(series: FollowedSeries, done: Boolean) {
+        repository.setDone(series.id, done)
+        message = if (done) {
+            UiMessage("${series.title} rangé dans les terminés", action = "Annuler") { repository.setDone(series.id, false) }
+        } else {
+            UiMessage("${series.title} de nouveau suivi")
+        }
+    }
+
     fun setRead(series: FollowedSeries, chapter: Chapter, read: Boolean) = repository.setRead(series.id, chapter, read)
 
     fun markAllRead(series: FollowedSeries) = repository.markAllRead(series.id)

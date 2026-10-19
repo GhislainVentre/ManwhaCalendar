@@ -98,6 +98,15 @@ fun UpToDateBadge(modifier: Modifier = Modifier) = Pill(
     modifier = modifier,
 )
 
+/** Série rangée dans les terminées par l'utilisateur. */
+@Composable
+fun DoneBadge(modifier: Modifier = Modifier) = Pill(
+    "TERMINÉ",
+    container = Color.Black.copy(alpha = 0.7f),
+    content = Color.White,
+    modifier = modifier,
+)
+
 // Le badge est posé sur les couvertures : un même vert lisible quel que soit le thème.
 private val UpToDateGreen = Color(0xFF34C77B)
 private val OnUpToDateGreen = Color(0xFF00210F)

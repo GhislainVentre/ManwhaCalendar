@@ -168,6 +168,7 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
                                 },
                                 onSetRead = { chapter, read -> vm.setRead(series, chapter, read) },
                                 onMarkAllRead = { vm.markAllRead(series) },
+                                onSetDone = { vm.setDone(series, it) },
                             )
                         }
                     }

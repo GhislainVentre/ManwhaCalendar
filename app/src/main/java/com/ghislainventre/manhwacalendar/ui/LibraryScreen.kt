@@ -51,7 +51,8 @@ fun LibraryScreen(
     onSearch: () -> Unit,
     onMarkAllSeen: () -> Unit,
 ) {
-    val sorted = followed.sortedWith(compareByDescending<FollowedSeries> { it.hasNew }.thenBy { it.title.lowercase() })
+    val (done, current) = followed.partition { it.done }
+    val sorted = current.sortedWith(compareByDescending<FollowedSeries> { it.hasNew }.thenBy { it.title.lowercase() })
     val newCount = followed.count { it.hasNew }
 
     PullToRefreshBox(
@@ -105,6 +106,17 @@ fun LibraryScreen(
                 }
             }
             items(sorted, key = { it.id }) { LibraryTile(it, onOpen) }
+            // Les séries terminées à la fin, pour ne pas encombrer celles en cours.
+            if (done.isNotEmpty()) {
+                item(key = "done-title", span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        "Terminées (${done.size})",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 4.dp, top = 12.dp),
+                    )
+                }
+                items(done.sortedBy { it.title.lowercase() }, key = { it.id }) { LibraryTile(it, onOpen) }
+            }
         }
     }
 }
@@ -114,9 +126,10 @@ private fun LibraryTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit
     Column(Modifier.clip(RoundedCornerShape(14.dp)).clickable { onOpen(series) }) {
         Box {
             Cover(series.coverUrl, series.title, Modifier.fillMaxWidth().aspectRatio(2f / 3f), corner = 14.dp)
-            if (series.hasNew) NewBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+            if (series.done) DoneBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
+            else if (series.hasNew) NewBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
             else if (series.isUpToDate) UpToDateBadge(Modifier.align(Alignment.TopStart).padding(6.dp))
-            series.nextEstimate?.let {
+            series.nextEstimate?.takeIf { !series.done }?.let {
                 Pill(
                     shortUntil(it.localDate()),
                     container = Color.Black.copy(alpha = 0.7f),

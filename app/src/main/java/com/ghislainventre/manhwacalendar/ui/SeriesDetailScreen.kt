@@ -25,7 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -67,6 +69,7 @@ fun SeriesDetailScreen(
     onUnfollow: () -> Unit,
     onSetRead: (Chapter, Boolean) -> Unit,
     onMarkAllRead: () -> Unit,
+    onSetDone: (Boolean) -> Unit,
 ) {
     var showOldRead by rememberSaveable(series.id) { mutableStateOf(false) }
     LazyColumn(
@@ -74,7 +77,10 @@ fun SeriesDetailScreen(
         contentPadding = WindowInsets.navigationBars.asPaddingValues(),
     ) {
         item(key = "hero") { Hero(series, onBack) }
-        item(key = "next") { NextReleaseCard(series, Modifier.padding(horizontal = 20.dp, vertical = 20.dp)) }
+        item(key = "next") {
+            if (series.done) Spacer(Modifier.height(20.dp))
+            else NextReleaseCard(series, Modifier.padding(horizontal = 20.dp, vertical = 20.dp))
+        }
         item(key = "actions") {
             Column(Modifier.padding(horizontal = 20.dp)) {
                 // Le geste le plus fréquent, en un seul appui : reprendre au premier chapitre non lu,
@@ -103,6 +109,18 @@ fun SeriesDetailScreen(
                         onClick = { onOpenUrl(series.url) },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp),
                     ) { Text("Voir la série sur ${series.sourceLabel}") }
+                }
+                OutlinedButton(
+                    onClick = { onSetDone(!series.done) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp),
+                ) {
+                    Icon(
+                        if (series.done) Icons.Default.Refresh else Icons.Default.Done,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (series.done) "Reprendre le suivi" else "Marquer comme terminé")
                 }
                 TextButton(
                     onClick = onUnfollow,
@@ -197,6 +215,7 @@ private fun Hero(series: FollowedSeries, onBack: () -> Unit) {
                 listOfNotNull(
                     series.sourceLabel,
                     series.status?.let { statusLabel(it).replaceFirstChar { c -> c.uppercase() } },
+                    "Rangée dans les terminées".takeIf { series.done },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
