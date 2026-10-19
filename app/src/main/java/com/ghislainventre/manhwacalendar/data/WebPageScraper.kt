@@ -28,14 +28,22 @@ class WebPageScraper(context: Context) {
     private val appContext = context.applicationContext
     // Quelques pages en parallèle pour interroger plusieurs sites à la fois sans saturer le téléphone.
     private val permits = Semaphore(MAX_PARALLEL_PAGES)
+    // Les vérifications en arrière-plan ont leurs propres places : elles ne font jamais attendre une recherche.
+    private val backgroundPermits = Semaphore(MAX_BACKGROUND_PAGES)
 
     /**
      * [stateJs] doit renvoyer 2 quand la page est prête, 1 quand elle est chargée sans le contenu
      * attendu (acceptée après un délai de grâce), 0 sinon. [extractJs] doit renvoyer une chaîne.
      */
     @SuppressLint("SetJavaScriptEnabled")
-    suspend fun scrape(url: String, stateJs: String, extractJs: String, timeoutMs: Long = 40_000): String =
-        permits.withPermit {
+    suspend fun scrape(
+        url: String,
+        stateJs: String,
+        extractJs: String,
+        timeoutMs: Long = 40_000,
+        background: Boolean = false,
+    ): String =
+        (if (background) backgroundPermits else permits).withPermit {
             withContext(Dispatchers.Main) {
                 val webView = WebView(appContext)
                 try {
@@ -85,5 +93,6 @@ class WebPageScraper(context: Context) {
     private companion object {
         const val GRACE_TICKS = 8
         const val MAX_PARALLEL_PAGES = 8
+        const val MAX_BACKGROUND_PAGES = 3
     }
 }

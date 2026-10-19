@@ -12,10 +12,11 @@ class MadaraSource(private val scraper: WebPageScraper) {
 
     data class SeriesPage(val title: String?, val coverUrl: String?, val chapters: List<Chapter>)
 
-    suspend fun search(site: Site, query: String): List<MangaSummary> {
+    /** [background] : recherche lancée par une vérification, qui ne doit pas ralentir celles de l'utilisateur. */
+    suspend fun search(site: Site, query: String, background: Boolean = false): List<MangaSummary> {
         val url = "${site.baseUrl.trimEnd('/')}/?s=${URLEncoder.encode(query, "UTF-8")}&post_type=wp-manga"
         // Recherche : délai court, un site lent ne doit pas faire attendre les autres résultats.
-        val json = JSONObject(scraper.scrape(url, SEARCH_STATE_JS, SEARCH_EXTRACT_JS, timeoutMs = SEARCH_TIMEOUT_MS))
+        val json = JSONObject(scraper.scrape(url, SEARCH_STATE_JS, SEARCH_EXTRACT_JS, timeoutMs = SEARCH_TIMEOUT_MS, background = background))
         return json.getJSONArray("items").objects().mapNotNull { item ->
             val href = item.optStringOrNull("u") ?: return@mapNotNull null
             MangaSummary(
@@ -34,7 +35,7 @@ class MadaraSource(private val scraper: WebPageScraper) {
     }
 
     suspend fun series(pageUrl: String): SeriesPage {
-        val json = JSONObject(scraper.scrape(pageUrl, SERIES_STATE_JS, SERIES_EXTRACT_JS))
+        val json = JSONObject(scraper.scrape(pageUrl, SERIES_STATE_JS, SERIES_EXTRACT_JS, background = true))
         // Les chapitres sont listés du plus récent au plus ancien. Une date illisible (format inconnu,
         // badge « NEW » sans texte) reprend celle du chapitre plus récent au lieu de faire disparaître le chapitre.
         var newerDate = Instant.now()

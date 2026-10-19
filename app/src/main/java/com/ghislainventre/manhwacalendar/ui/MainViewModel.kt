@@ -17,6 +17,10 @@ import com.ghislainventre.manhwacalendar.data.SeriesGroup
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import java.time.Duration
+import java.time.Instant
+
+private const val STARTUP_REFRESH_AFTER_MIN = 60L
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -52,7 +56,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var recommendationsKey: Set<String>? = null
 
     init {
-        if (followed.value.isNotEmpty()) refresh()
+        // À l'ouverture, seulement si la dernière vérification date : la tâche de fond vérifie déjà toutes les 6 h,
+        // et une vérification complète à chaque lancement occupait le téléphone pendant les recherches.
+        val stale = Instant.now().minus(Duration.ofMinutes(STARTUP_REFRESH_AFTER_MIN))
+        if (followed.value.any { !it.done && (it.lastCheckedAt == null || it.lastCheckedAt.isBefore(stale)) }) refresh()
     }
 
     /** [userInitiated] : l'utilisateur a demandé la vérification, on lui confirme aussi quand rien n'a changé. */

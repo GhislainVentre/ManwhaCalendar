@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,8 +30,6 @@ class SeriesRepository(
 
     private val prefs = context.getSharedPreferences("manhwa_calendar", Context.MODE_PRIVATE)
     private val refreshMutex = Mutex()
-    /** Dernière recherche d'une série MangaDex sur les sites web, par identifiant. */
-    private val webLookups = ConcurrentHashMap<String, Instant>()
     /** Échecs de recherche consécutifs par site. */
     private val siteFailures = ConcurrentHashMap<String, Int>()
 
@@ -161,19 +161,28 @@ class SeriesRepository(
 
     /** Met à jour toutes les séries et renvoie les nouveaux chapitres détectés. */
     suspend fun refreshAll(): List<NewChapterEvent> = refreshMutex.withLock {
-        val events = mutableListOf<NewChapterEvent>()
-        var lastError: Exception? = null
-        for (series in _followed.value.filterNot { it.done }) {
-            try {
-                refreshOne(series, notifyNew = true)?.let(events::add)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                lastError = e
-            }
-            delay(250) // limite de débit de l'API MangaDex
+        // Quelques séries à la fois : une par une, une liste avec des sites web lents prenait plusieurs minutes.
+        val permits = Semaphore(PARALLEL_REFRESH)
+        val outcomes = coroutineScope {
+            _followed.value.filterNot { it.done }.map { series ->
+                async {
+                    permits.withPermit {
+                        try {
+                            Result.success(refreshOne(series, notifyNew = true))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Result.failure(e)
+                        } finally {
+                            delay(250) // limite de débit de l'API MangaDex
+                        }
+                    }
+                }
+            }.awaitAll()
         }
-        if (events.isEmpty() && lastError != null && _followed.value.any { !it.done }) throw lastError
+        val events = outcomes.mapNotNull { it.getOrNull() }
+        val lastError = outcomes.lastOrNull { it.isFailure }?.exceptionOrNull()
+        if (events.isEmpty() && lastError != null) throw lastError
         events
     }
 
@@ -286,16 +295,18 @@ class SeriesRepository(
      * car chaque site passe par une WebView.
      */
     private suspend fun findOnWeb(series: FollowedSeries, known: List<Chapter>): WebMatch? {
+        // Gardée d'un lancement à l'autre : sinon chaque ouverture de l'appli relançait ces recherches sur tous les sites.
         val now = Instant.now()
-        if (webLookups[series.id]?.isAfter(now.minus(WEB_LOOKUP_INTERVAL)) == true) return null
-        webLookups[series.id] = now
+        val last = prefs.getLong(WEB_LOOKUP_PREFIX + series.id, 0L)
+        if (Instant.ofEpochMilli(last).isAfter(now.minus(WEB_LOOKUP_INTERVAL))) return null
+        prefs.edit().putLong(WEB_LOOKUP_PREFIX + series.id, now.toEpochMilli()).apply()
 
         val titles = (orEmptyOnError { api.titles(series.id) } + series.title).distinctBy(TitleMatch::normalize)
         val sites = _sites.value.filter { it.enabled && it.name != MANGADEX_NAME }
         val hits = coroutineScope {
             sites.map { site ->
                 async {
-                    orEmptyOnError { madara.search(site, titles.first()) }
+                    orEmptyOnError { madara.search(site, titles.first(), background = true) }
                         .filter { it.pageUrl != null && TitleMatch.matches(it.title, titles) }
                         .map { site to it.pageUrl!! }
                 }
@@ -468,11 +479,13 @@ class SeriesRepository(
         const val KEY_FOLLOWED = "followed"
         const val KEY_LANGUAGE = "language"
         const val CHAPTERS_PREFIX = "chapters_"
+        const val WEB_LOOKUP_PREFIX = "web_lookup_"
         const val KEY_SITES = "sites"
         const val KEY_SITES_VERSION = "sites_version"
         /** À augmenter quand la liste des sites par défaut change. */
         const val SITES_VERSION = 2
         const val MAX_SITE_FAILURES = 2
+        const val PARALLEL_REFRESH = 3
         const val MANGADEX_NAME = "MangaDex"
         /** Toute la série, pour qui la commence ; la limite ne sert qu'aux séries démesurées. */
         const val MAX_STORED_CHAPTERS = 1500
