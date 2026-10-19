@@ -483,7 +483,7 @@ class SeriesRepository(
         const val KEY_SITES = "sites"
         const val KEY_SITES_VERSION = "sites_version"
         /** À augmenter quand la liste des sites par défaut change. */
-        const val SITES_VERSION = 2
+        const val SITES_VERSION = 3
         const val MAX_SITE_FAILURES = 2
         const val PARALLEL_REFRESH = 3
         const val MANGADEX_NAME = "MangaDex"

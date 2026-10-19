@@ -41,4 +41,20 @@ class MadaraDatesTest {
         assertNull(MadaraDates.chapterTitle("Chapter 45"))
         assertEquals("The End", MadaraDates.chapterTitle("Chapter 45 - The End"))
     }
+
+    @Test
+    fun frenchDates() {
+        assertEquals(Instant.parse("2025-05-16T12:00:00Z"), parse("16 mai 2025"))
+        assertEquals(Instant.parse("2026-10-03T12:00:00Z"), parse("3 octobre 2026"))
+        assertEquals(Instant.parse("2026-10-03T12:00:00Z"), parse("3 oct. 2026"))
+        assertEquals(now.minus(Duration.ofHours(2)), parse("il y a 2 heures"))
+        assertEquals(now.minus(Duration.ofDays(1)), parse("il y a un jour"))
+        assertEquals(now.minus(Duration.ofDays(1)), parse("Hier"))
+    }
+
+    @Test
+    fun frenchChapterLabels() {
+        assertEquals("206", MadaraDates.chapterNumber(" Chapitre 206"))
+        assertNull(MadaraDates.chapterTitle("Chapitre 206"))
+    }
 }

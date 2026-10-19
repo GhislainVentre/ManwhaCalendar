@@ -10,8 +10,15 @@ import java.util.Locale
 /** Lecture des dates affichées par les sites Madara (« October 3, 2026 », « 2 hours ago »…). */
 object MadaraDates {
     private val formats = listOf("MMMM d, yyyy", "MMM d, yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "d MMMM yyyy", "MM/dd/yyyy")
-        .map { DateTimeFormatter.ofPattern(it, Locale.ENGLISH) }
+        .map { DateTimeFormatter.ofPattern(it, Locale.ENGLISH) } +
+        // Sites français : « 16 mai 2025 », « 3 oct. 2026 ».
+        listOf("d MMMM yyyy", "d MMM yyyy", "MMMM d, yyyy").map { DateTimeFormatter.ofPattern(it, Locale.FRENCH) }
     private val relative = Regex("""(\d+|an?)\s*(sec|second|min|minute|hour|day|week|month|year)s?\s+ago""", RegexOption.IGNORE_CASE)
+    /** « il y a 2 heures », « il y a un jour ». */
+    private val relativeFr = Regex(
+        """il y a\s+(\d+|une?)\s*(sec|seconde|min|minute|heure|h|jour|j|semaine|mois|an|année)""",
+        RegexOption.IGNORE_CASE,
+    )
     private val number = Regex("""(\d+(?:\.\d+)?)""")
 
     fun parse(text: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): Instant? {
@@ -19,7 +26,21 @@ object MadaraDates {
         if (t.isEmpty()) return null
         when (t.lowercase(Locale.ENGLISH)) {
             "today", "just now", "new" -> return now
-            "yesterday" -> return now.minus(Duration.ofDays(1))
+            "yesterday", "hier" -> return now.minus(Duration.ofDays(1))
+            "aujourd'hui", "aujourd’hui", "nouveau" -> return now
+        }
+        relativeFr.find(t)?.let { m ->
+            val n = m.groupValues[1].toLongOrNull() ?: 1L
+            val unit = when (m.groupValues[2].lowercase(Locale.FRENCH)) {
+                "sec", "seconde" -> Duration.ofSeconds(n)
+                "min", "minute" -> Duration.ofMinutes(n)
+                "heure", "h" -> Duration.ofHours(n)
+                "jour", "j" -> Duration.ofDays(n)
+                "semaine" -> Duration.ofDays(7 * n)
+                "mois" -> Duration.ofDays(30 * n)
+                else -> Duration.ofDays(365 * n)
+            }
+            return now.minus(unit)
         }
         relative.find(t)?.let { m ->
             val n = m.groupValues[1].toLongOrNull() ?: 1L
@@ -35,7 +56,8 @@ object MadaraDates {
             return now.minus(unit)
         }
         for (f in formats) {
-            val date = runCatching { LocalDate.parse(t, f) }.getOrNull() ?: continue
+            val date = runCatching { LocalDate.parse(t, f) }.getOrNull()
+                ?: runCatching { LocalDate.parse(t.lowercase(Locale.FRENCH), f) }.getOrNull() ?: continue
             return date.atTime(12, 0).atZone(zone).toInstant()
         }
         return null
@@ -48,5 +70,5 @@ object MadaraDates {
     fun chapterTitle(label: String): String? =
         label.replace(chapterPrefix, "").trim().takeIf { it.isNotEmpty() }
 
-    private val chapterPrefix = Regex("""^\s*(chapter|chap\.?|ch\.?|episode|ep\.?)\s*\d+(\.\d+)?\s*[-:–]?""", RegexOption.IGNORE_CASE)
+    private val chapterPrefix = Regex("""^\s*(chapter|chapitre|chap\.?|ch\.?|episode|épisode|ep\.?)\s*\d+(\.\d+)?\s*[-:–]?""", RegexOption.IGNORE_CASE)
 }
