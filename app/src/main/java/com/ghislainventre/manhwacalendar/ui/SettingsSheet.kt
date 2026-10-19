@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -38,15 +39,21 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
+import com.ghislainventre.manhwacalendar.update.AppUpdater
 
-/** Réglages regroupés dans une feuille : langue des chapitres et sites de recherche. */
+/** Réglages regroupés dans une feuille : appli (version, retour), langue des chapitres et sites de recherche. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
     val sites by vm.sites.collectAsState()
     val language by vm.language.collectAsState()
     var address by remember { mutableStateOf("") }
+    var showFeedback by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val versionName = remember { AppUpdater.installedVersionName(context) }
+    if (showFeedback) FeedbackDialog { showFeedback = false }
     val addSite = {
         if (address.isNotBlank()) {
             vm.addSite(address.trim())
@@ -66,6 +73,20 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
+            }
+
+            item(key = "app") {
+                SheetSection("Application", "Version $versionName")
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilledTonalButton(onClick = { vm.checkForUpdate(userInitiated = true) }) {
+                        Text("Mises à jour")
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { showFeedback = true }) { Text("Envoyer un retour") }
+                }
             }
 
             item(key = "language-title") {
