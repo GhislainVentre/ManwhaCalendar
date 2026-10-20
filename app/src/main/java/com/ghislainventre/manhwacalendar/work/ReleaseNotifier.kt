@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.ghislainventre.manhwacalendar.R
 import com.ghislainventre.manhwacalendar.data.NewChapterEvent
+import com.ghislainventre.manhwacalendar.tr
 
 object ReleaseNotifier {
     private const val CHANNEL_ID = "new_chapters"
@@ -40,12 +41,12 @@ object ReleaseNotifier {
             Intent(Intent.ACTION_VIEW, Uri.parse(chapter.url)),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val label = chapter.number?.let { "Chapitre $it" } ?: "Nouveau chapitre"
+        val label = chapter.number?.let { tr("Chapitre ", "Chapter ") + it } ?: tr("Nouveau chapitre", "New chapter")
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFFF6F91.toInt())
             .setContentTitle(event.series.title)
-            .setContentText("$label disponible (${chapter.language.uppercase()})")
+            .setContentText(tr("$label disponible", "$label is out") + " (${chapter.language.uppercase()})")
             .setContentIntent(open)
             .setAutoCancel(true)
             .build()

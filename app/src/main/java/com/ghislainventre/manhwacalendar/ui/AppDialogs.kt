@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ghislainventre.manhwacalendar.tr
 import com.ghislainventre.manhwacalendar.update.AppUpdater
 
 /** Propose la nouvelle version trouvée sur GitHub, puis montre le téléchargement. */
@@ -29,14 +30,17 @@ fun UpdateDialog(vm: MainViewModel) {
     val progress = vm.updateProgress
     AlertDialog(
         onDismissRequest = { if (progress == null) vm.postponeUpdate() },
-        title = { Text("Nouvelle version disponible") },
+        title = { Text(tr("Nouvelle version disponible", "New version available")) },
         text = {
             Column {
                 Text(
                     if (progress == null) {
-                        "Une mise à jour de Manhwa Calendar est prête. Tes séries suivies sont conservées."
+                        tr(
+                            "Une mise à jour de Manhwa Calendar est prête. Tes séries suivies sont conservées.",
+                            "A Manhwa Calendar update is ready. Your followed series are kept.",
+                        )
                     } else {
-                        "Téléchargement… ${(progress * 100).toInt()} %"
+                        tr("Téléchargement…", "Downloading…") + " ${(progress * 100).toInt()} %"
                     },
                 )
                 if (progress != null) {
@@ -46,10 +50,10 @@ fun UpdateDialog(vm: MainViewModel) {
             }
         },
         confirmButton = {
-            TextButton(onClick = vm::installUpdate, enabled = progress == null) { Text("Mettre à jour") }
+            TextButton(onClick = vm::installUpdate, enabled = progress == null) { Text(tr("Mettre à jour", "Update")) }
         },
         dismissButton = {
-            TextButton(onClick = vm::postponeUpdate, enabled = progress == null) { Text("Plus tard") }
+            TextButton(onClick = vm::postponeUpdate, enabled = progress == null) { Text(tr("Plus tard", "Later")) }
         },
     )
 }
@@ -61,15 +65,20 @@ fun FeedbackDialog(onDismiss: () -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Envoyer un retour") },
+        title = { Text(tr("Envoyer un retour", "Send feedback")) },
         text = {
             Column {
-                Text("Un bug, une idée, un site qui ne marche pas ? Écris-le ici, ton appli mail s'ouvrira avec le message prêt à partir.")
+                Text(
+                    tr(
+                        "Un bug, une idée, un site qui ne marche pas ? Écris-le ici, ton appli mail s'ouvrira avec le message prêt à partir.",
+                        "A bug, an idea, a site that doesn't work? Write it here and your mail app will open with the message ready to send.",
+                    ),
+                )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    placeholder = { Text("Ton message") },
+                    placeholder = { Text(tr("Ton message", "Your message")) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
                 )
             }
@@ -81,9 +90,9 @@ fun FeedbackDialog(onDismiss: () -> Unit) {
                     onDismiss()
                 },
                 enabled = text.isNotBlank(),
-            ) { Text("Envoyer") }
+            ) { Text(tr("Envoyer", "Send")) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Annuler", "Cancel")) } },
     )
 }
 
@@ -102,7 +111,7 @@ private fun Context.shareFeedback(text: String) {
         .setType("text/plain")
         .putExtra(Intent.EXTRA_EMAIL, arrayOf(FEEDBACK_ADDRESS))
         .putExtra(Intent.EXTRA_SUBJECT, FEEDBACK_SUBJECT)
-        .putExtra(Intent.EXTRA_TEXT, "À envoyer à $FEEDBACK_ADDRESS\n\n$body")
+        .putExtra(Intent.EXTRA_TEXT, tr("À envoyer à", "Send to") + " $FEEDBACK_ADDRESS\n\n$body")
     runCatching { startActivity(mail) }
-        .recoverCatching { startActivity(Intent.createChooser(share, "Envoyer le retour avec…")) }
+        .recoverCatching { startActivity(Intent.createChooser(share, tr("Envoyer le retour avec…", "Send feedback with…"))) }
 }

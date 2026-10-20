@@ -49,11 +49,15 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.TitleMatch
+import com.ghislainventre.manhwacalendar.tr
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    AGENDA("Agenda", Icons.Default.DateRange),
-    LIBRARY("Mes séries", Icons.Default.Favorite),
-    SEARCH("Rechercher", Icons.Default.Search),
+private enum class Tab(private val fr: String, private val en: String, val icon: ImageVector) {
+    AGENDA("Agenda", "Schedule", Icons.Default.DateRange),
+    LIBRARY("Mes séries", "My series", Icons.Default.Favorite),
+    SEARCH("Rechercher", "Search", Icons.Default.Search),
+    ;
+
+    val label: String get() = tr(fr, en)
 }
 
 @Composable

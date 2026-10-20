@@ -6,6 +6,7 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -65,14 +66,14 @@ class WebPageScraper(context: Context) {
                     withTimeoutOrNull(timeoutMs) {
                         while (result == null) {
                             delay(1_000)
-                            unreachable?.let { throw IOException("site injoignable ($it)") }
+                            unreachable?.let { throw IOException(tr("site injoignable", "site unreachable") + " ($it)") }
                             when (webView.eval(stateJs)) {
                                 "2" -> result = webView.eval(extractJs)
                                 "1" -> if (++loadedTicks >= GRACE_TICKS) result = webView.eval(extractJs)
                             }
                         }
                     }
-                    decode(result ?: throw IOException("le site ne répond pas (vérification Cloudflare ?)"))
+                    decode(result ?: throw IOException(tr("le site ne répond pas (vérification Cloudflare ?)", "the site is not responding (Cloudflare check?)")))
                 } finally {
                     webView.stopLoading()
                     webView.destroy()
@@ -86,7 +87,7 @@ class WebPageScraper(context: Context) {
 
     /** evaluateJavascript renvoie la valeur encodée en JSON : on décode la chaîne. */
     private fun decode(raw: String): String {
-        if (raw == "null") throw IOException("page illisible")
+        if (raw == "null") throw IOException(tr("page illisible", "unreadable page"))
         return JSONArray("[$raw]").getString(0)
     }
 

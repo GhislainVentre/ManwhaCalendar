@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
+import com.ghislainventre.manhwacalendar.tr
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -92,11 +93,11 @@ fun AgendaScreen(
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
             item(key = "header") {
                 ScreenHeader(
-                    "Agenda",
+                    tr("Agenda", "Schedule"),
                     subtitle = when {
                         followed.isEmpty() -> null
-                        thisWeek == 0 -> "Rien de prévu cette semaine"
-                        else -> plural(thisWeek, "sortie prévue", "sorties prévues") + " cette semaine"
+                        thisWeek == 0 -> tr("Rien de prévu cette semaine", "Nothing due this week")
+                        else -> plural(thisWeek, tr("sortie prévue", "release due"), tr("sorties prévues", "releases due")) + tr(" cette semaine", " this week")
                     },
                 ) {
                     RefreshAction(refreshing, onRefresh)
@@ -107,9 +108,12 @@ fun AgendaScreen(
                 item(key = "empty") {
                     EmptyState(
                         icon = Icons.Default.DateRange,
-                        title = "Ton agenda est vide",
-                        body = "Suis tes manhwa pour voir ici leurs prochaines sorties et être prévenu à chaque nouveau chapitre.",
-                        action = "Trouver une série",
+                        title = tr("Ton agenda est vide", "Your schedule is empty"),
+                        body = tr(
+                            "Suis tes manhwa pour voir ici leurs prochaines sorties et être prévenu à chaque nouveau chapitre.",
+                            "Follow your manhwa to see their next releases here and get notified of every new chapter.",
+                        ),
+                        action = tr("Trouver une série", "Find a series"),
                         onAction = onSearch,
                     )
                 }
@@ -121,7 +125,7 @@ fun AgendaScreen(
                 }
             }
             if (mine.isNotEmpty()) {
-                item(key = "mine-title") { SectionTitle("Mes manhwa") }
+                item(key = "mine-title") { SectionTitle(tr("Mes manhwa", "My manhwa")) }
                 item(key = "mine") {
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 20.dp),
@@ -132,16 +136,16 @@ fun AgendaScreen(
                 }
             }
             if (byDay.isNotEmpty()) {
-                item(key = "upcoming-title") { SectionTitle("À venir") }
+                item(key = "upcoming-title") { SectionTitle(tr("À venir", "Coming up")) }
             }
             byDay.forEach { (date, list) ->
                 item(key = "day-$date") { DayBlock(date, today, list, onOpen) }
             }
             if (unknown.isNotEmpty()) {
                 item(key = "unknown-title") {
-                    SectionTitle("Sans date prévue") {
+                    SectionTitle(tr("Sans date prévue", "No expected date")) {
                         TextButton(onClick = { showUnknown = !showUnknown }) {
-                            Text(if (showUnknown) "Masquer" else "Voir (${unknown.size})")
+                            Text(if (showUnknown) tr("Masquer", "Hide") else tr("Voir", "Show") + " (${unknown.size})")
                             Icon(
                                 if (showUnknown) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -154,7 +158,7 @@ fun AgendaScreen(
                         SeriesCard(
                             s,
                             headline = unknownReason(s),
-                            meta = s.latestChapter?.let { "Dernier : ${chapterLabel(it.number)} · ${relativePast(it.readableAt)}" },
+                            meta = s.latestChapter?.let { tr("Dernier : ", "Latest: ") + "${chapterLabel(it.number)} · ${relativePast(it.readableAt)}" },
                             onOpen = onOpen,
                             headlineColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -186,7 +190,7 @@ private fun WeekStrip(today: LocalDate, counts: Map<LocalDate, Int>, onDay: (Loc
                     .clickable(enabled = count > 0) { onDay(date) }
                     .semantics(mergeDescendants = true) {
                         contentDescription = longDate(date) + ", " +
-                            if (count == 0) "aucune sortie" else plural(count, "sortie prévue", "sorties prévues")
+                            if (count == 0) tr("aucune sortie", "no release") else plural(count, tr("sortie prévue", "release due"), tr("sorties prévues", "releases due"))
                     }
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
