@@ -1,6 +1,8 @@
 package com.ghislainventre.manhwacalendar.data
 
 import android.content.Context
+import com.ghislainventre.manhwacalendar.isFrenchUi
+import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -39,7 +41,8 @@ class SeriesRepository(
 
     private val _language = MutableStateFlow(
         runCatching { ChapterLanguage.valueOf(prefs.getString(KEY_LANGUAGE, null) ?: "") }
-            .getOrDefault(ChapterLanguage.FR_EN)
+            // Premier lancement : chapitres en anglais sur un téléphone qui n'est pas en français.
+            .getOrDefault(if (isFrenchUi) ChapterLanguage.FR_EN else ChapterLanguage.EN)
     )
     val language: StateFlow<ChapterLanguage> = _language.asStateFlow()
 
@@ -50,7 +53,7 @@ class SeriesRepository(
     /** Une source de recherche : MangaDex ou un site web activé. */
     class SearchSource(val name: String, val search: suspend (String) -> List<MangaSummary>)
 
-    fun searchSources(): List<SearchSource> = _sites.value.filter { it.enabled }.map { site ->
+    fun searchSources(): List<SearchSource> = webSitesForLanguage(_sites.value.filter { it.enabled }).map { site ->
         if (site.name == MANGADEX_NAME) {
             SearchSource(site.name) { q -> api.search(q, manhwaOnly = true) }
         } else {
@@ -68,15 +71,19 @@ class SeriesRepository(
         throw e
     } catch (e: Exception) {
         // Sans connexion, tous les sites échouent : ce n'est pas leur faute, on ne les désactive pas.
-        if (!Network.isOnline(appContext)) throw IOException(Network.NO_CONNECTION, e)
+        if (!Network.isOnline(appContext)) throw IOException(Network.noConnection, e)
         val failures = siteFailures.merge(site.name, 1) { a, b -> a + b } ?: 1
         if (failures >= MAX_SITE_FAILURES) {
             siteFailures.remove(site.name)
             setSiteEnabled(site.name, false)
-            throw IOException("${e.message} · site désactivé, réactivable dans les réglages")
+            throw IOException("${e.message} · " + tr("site désactivé, réactivable dans les réglages", "site disabled, you can turn it back on in Settings"))
         }
         throw e
     }
+
+    /** Chapitres en anglais seulement : les sites français ne serviraient à rien (et pourraient être choisis au suivi). */
+    private fun webSitesForLanguage(sites: List<Site>): List<Site> =
+        if (_language.value == ChapterLanguage.EN) sites.filterNot { MadaraSource.isFrench(it.baseUrl) } else sites
 
     fun setSiteEnabled(name: String, enabled: Boolean) =
         saveSites(_sites.value.map { if (it.name == name) it.copy(enabled = enabled) else it })
@@ -207,9 +214,9 @@ class SeriesRepository(
                 if (web != null) {
                     Fetched(manga?.title, manga?.coverUrl, status, web.page.chapters.sortedByDescending { it.readableAt }, web)
                 } else {
-                    // Rien dans la langue choisie, ni sur les sites : mieux vaut les chapitres des autres langues
-                    // qu'une fiche vide (beaucoup de séries n'ont aucun chapitre français sur MangaDex).
-                    val shown = if (chapters.isEmpty() && wanted != ChapterLanguage.FR_EN.codes) {
+                    // Rien en français, ni sur les sites : mieux vaut les chapitres anglais qu'une fiche vide
+                    // (beaucoup de séries n'ont aucun chapitre français sur MangaDex). L'inverse n'aide pas un lecteur anglais.
+                    val shown = if (chapters.isEmpty() && wanted == ChapterLanguage.FR.codes) {
                         api.latestChapters(series.id, ChapterLanguage.FR_EN.codes)
                     } else {
                         chapters
@@ -329,7 +336,7 @@ class SeriesRepository(
         val titles = (orEmptyOnError { api.titles(series.id) } + series.title).distinctBy(TitleMatch::normalize)
         // En français, les sites français passent en premier : leur page est retenue si elle va assez loin.
         val french = "fr" in _language.value.codes && "en" !in _language.value.codes
-        val sites = _sites.value.filter { it.enabled && it.name != MANGADEX_NAME }
+        val sites = webSitesForLanguage(_sites.value.filter { it.enabled && it.name != MANGADEX_NAME })
             .sortedByDescending { french && MadaraSource.isFrench(it.baseUrl) }
         val hits = coroutineScope {
             sites.map { site ->

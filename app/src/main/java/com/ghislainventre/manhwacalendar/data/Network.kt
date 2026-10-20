@@ -3,6 +3,7 @@ package com.ghislainventre.manhwacalendar.data
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import com.ghislainventre.manhwacalendar.tr
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
@@ -26,14 +27,14 @@ object Network {
         var cause: Throwable? = error
         while (cause != null) {
             when (cause) {
-                is UnknownHostException, is ConnectException -> return NO_CONNECTION
-                is SocketTimeoutException -> return "le serveur met trop de temps à répondre"
-                is SSLException -> return "connexion sécurisée impossible"
+                is UnknownHostException, is ConnectException -> return noConnection
+                is SocketTimeoutException -> return tr("le serveur met trop de temps à répondre", "the server is taking too long to respond")
+                is SSLException -> return tr("connexion sécurisée impossible", "secure connection failed")
             }
             cause = cause.cause
         }
-        return error.message?.takeIf { it.isNotBlank() } ?: "erreur inconnue"
+        return error.message?.takeIf { it.isNotBlank() } ?: tr("erreur inconnue", "unknown error")
     }
 
-    const val NO_CONNECTION = "pas de connexion internet"
+    val noConnection: String get() = tr("pas de connexion internet", "no internet connection")
 }

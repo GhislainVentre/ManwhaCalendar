@@ -15,6 +15,7 @@ import com.ghislainventre.manhwacalendar.data.Network
 import com.ghislainventre.manhwacalendar.data.Recommendation
 import com.ghislainventre.manhwacalendar.data.SearchGrouping
 import com.ghislainventre.manhwacalendar.data.SeriesGroup
+import com.ghislainventre.manhwacalendar.tr
 import com.ghislainventre.manhwacalendar.update.AppUpdater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -80,7 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (refreshing) return
         // Hors ligne, chaque série échouerait : on ne lance rien, et on ne le dit que si on l'a demandé.
         if (!Network.isOnline(getApplication<Application>())) {
-            if (userInitiated) message = UiMessage("Pas de connexion internet")
+            if (userInitiated) message = UiMessage(tr("Pas de connexion internet", "No internet connection"))
             return
         }
         refreshing = true
@@ -89,14 +90,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val events = repository.refreshAll()
                 when {
                     events.isNotEmpty() -> message = UiMessage(
-                        plural(events.size, "nouveau chapitre", "nouveaux chapitres") + " !",
+                        plural(events.size, tr("nouveau chapitre", "new chapter"), tr("nouveaux chapitres", "new chapters")) + tr(" !", "!"),
                     )
-                    userInitiated -> message = UiMessage("Tout est à jour")
+                    userInitiated -> message = UiMessage(tr("Tout est à jour", "Everything is up to date"))
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                message = UiMessage("Vérification impossible : ${Network.describe(e)}")
+                message = UiMessage(tr("Vérification impossible : ", "Couldn't check: ") + Network.describe(e))
             } finally {
                 refreshing = false
             }
@@ -117,12 +118,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val q = query.trim()
         if (q.isEmpty()) return
         if (!Network.isOnline(getApplication<Application>())) {
-            message = UiMessage("Pas de connexion internet")
+            message = UiMessage(tr("Pas de connexion internet", "No internet connection"))
             return
         }
         val sources = repository.searchSources()
         if (sources.isEmpty()) {
-            message = UiMessage("Aucun site activé (Réglages → Sites de recherche)")
+            message = UiMessage(tr("Aucun site activé (Réglages → Sites de recherche)", "No site enabled (Settings → Search sites)"))
             return
         }
         searchJob?.cancel()
@@ -172,21 +173,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setSiteEnabled(name: String, enabled: Boolean) = repository.setSiteEnabled(name, enabled)
 
     fun addSite(address: String) {
-        if (!repository.addSite(address)) message = UiMessage("Adresse invalide ou site déjà présent")
+        if (!repository.addSite(address)) message = UiMessage(tr("Adresse invalide ou site déjà présent", "Invalid address or site already listed"))
     }
 
     fun removeSite(name: String) = repository.removeSite(name)
 
     /** Suit la série sur son meilleur site, en gardant les autres en secours. */
     fun follow(group: SeriesGroup) {
-        message = UiMessage("${group.title} ajouté à tes séries (${group.best.sourceLabel})")
+        message = UiMessage(tr("${group.title} ajouté à tes séries", "${group.title} added to your series") + " (${group.best.sourceLabel})")
         viewModelScope.launch {
             repository.follow(group.best, group.alternates)
         }
     }
 
     fun follow(manga: MangaSummary) {
-        message = UiMessage("${manga.title} ajouté à tes séries")
+        message = UiMessage(tr("${manga.title} ajouté à tes séries", "${manga.title} added to your series"))
         viewModelScope.launch {
             repository.follow(manga)
         }
@@ -195,7 +196,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Retire la série tout de suite ; la snackbar propose d'annuler. */
     fun unfollow(series: FollowedSeries) {
         repository.unfollow(series.id)
-        message = UiMessage("${series.title} retiré de tes séries", action = "Annuler") { repository.restore(series) }
+        message = UiMessage(tr("${series.title} retiré de tes séries", "${series.title} removed from your series"), action = tr("Annuler", "Undo")) { repository.restore(series) }
     }
 
     fun markSeen(id: String) = repository.markSeen(id)
@@ -205,9 +206,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setDone(series: FollowedSeries, done: Boolean) {
         repository.setDone(series.id, done)
         message = if (done) {
-            UiMessage("${series.title} rangé dans les terminés", action = "Annuler") { repository.setDone(series.id, false) }
+            UiMessage(tr("${series.title} rangé dans les terminés", "${series.title} moved to finished"), action = tr("Annuler", "Undo")) { repository.setDone(series.id, false) }
         } else {
-            UiMessage("${series.title} de nouveau suivi")
+            UiMessage(tr("${series.title} de nouveau suivi", "Following ${series.title} again"))
         }
     }
 
@@ -230,12 +231,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val latest = AppUpdater.latestVersionCode()
                 when {
                     latest != null && latest > AppUpdater.installedVersionCode(app) -> availableUpdate = latest
-                    userInitiated -> message = UiMessage("Tu as déjà la dernière version")
+                    userInitiated -> message = UiMessage(tr("Tu as déjà la dernière version", "You already have the latest version"))
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (userInitiated) message = UiMessage("Vérification impossible : ${Network.describe(e)}")
+                if (userInitiated) message = UiMessage(tr("Vérification impossible : ", "Couldn't check: ") + Network.describe(e))
             }
         }
     }
@@ -257,7 +258,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                message = UiMessage("Téléchargement impossible : ${Network.describe(e)}")
+                message = UiMessage(tr("Téléchargement impossible : ", "Download failed: ") + Network.describe(e))
             } finally {
                 updateProgress = null
             }

@@ -1,5 +1,7 @@
 package com.ghislainventre.manhwacalendar.data
 
+import com.ghislainventre.manhwacalendar.isFrenchUi
+import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -119,11 +121,12 @@ class MangaDexApi {
     private fun pickTitle(attrs: JSONObject): String {
         val titles = attrs.optJSONObject("title") ?: JSONObject()
         val alt = attrs.optJSONArray("altTitles")?.objects().orEmpty()
-        for (lang in listOf("fr", "en")) {
+        // Le titre dans la langue du téléphone : un lecteur anglais ne reconnaît pas le titre français.
+        for (lang in if (isFrenchUi) listOf("fr", "en") else listOf("en")) {
             titles.optStringOrNull(lang)?.let { return it }
             alt.firstNotNullOfOrNull { it.optStringOrNull(lang) }?.let { return it }
         }
-        return titles.keys().asSequence().firstNotNullOfOrNull { titles.optStringOrNull(it) } ?: "Sans titre"
+        return titles.keys().asSequence().firstNotNullOfOrNull { titles.optStringOrNull(it) } ?: tr("Sans titre", "Untitled")
     }
 
     private fun parseChapter(obj: JSONObject): Chapter? {
@@ -155,7 +158,7 @@ class MangaDexApi {
         }
         return when (val response = request(url)) {
             is Response.Ok -> response.json
-            is Response.RetryAfter -> throw IOException("MangaDex est surchargé, réessaie plus tard")
+            is Response.RetryAfter -> throw IOException(tr("MangaDex est surchargé, réessaie plus tard", "MangaDex is overloaded, try again later"))
         }
     }
 
@@ -176,7 +179,7 @@ class MangaDexApi {
                 429, 503 -> Response.RetryAfter(
                     (connection.getHeaderField("Retry-After")?.trim()?.toLongOrNull() ?: 2L).coerceIn(1L, 10L) * 1_000
                 )
-                else -> throw IOException("MangaDex a répondu $code")
+                else -> throw IOException(tr("MangaDex a répondu $code", "MangaDex returned $code"))
             }
         } finally {
             connection.disconnect()
