@@ -19,6 +19,7 @@ class MadaraDatesTest {
         assertEquals(expected, parse("October 3, 2026"))
         assertEquals(expected, parse("Oct 3, 2026"))
         assertEquals(expected, parse("03/10/2026"))
+        assertEquals(expected, parse("3 Oct 2026"))
     }
 
     @Test
@@ -26,6 +27,8 @@ class MadaraDatesTest {
         assertEquals(now.minus(Duration.ofHours(2)), parse("2 hours ago"))
         assertEquals(now.minus(Duration.ofDays(1)), parse("a day ago"))
         assertEquals(now.minus(Duration.ofMinutes(15)), parse("15 mins ago"))
+        assertEquals(now.minus(Duration.ofHours(3)), parse("3 hrs ago"))
+        assertEquals(now.minus(Duration.ofDays(14)), parse("2 wks ago"))
         assertEquals(now.minus(Duration.ofDays(1)), parse("Yesterday"))
     }
 

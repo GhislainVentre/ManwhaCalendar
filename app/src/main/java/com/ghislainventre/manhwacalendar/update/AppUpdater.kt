@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
+import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -45,7 +46,7 @@ object AppUpdater {
         val partial = File(dir, "ManhwaCalendar.apk.part")
         val connection = open(APK_URL)
         try {
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) error("erreur ${connection.responseCode}")
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) error(tr("erreur ", "error ") + connection.responseCode)
             val total = connection.contentLengthLong
             connection.inputStream.use { input ->
                 partial.outputStream().use { output ->

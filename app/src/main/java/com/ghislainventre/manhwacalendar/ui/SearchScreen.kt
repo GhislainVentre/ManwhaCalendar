@@ -47,6 +47,7 @@ import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Site
 import com.ghislainventre.manhwacalendar.data.Source
 import com.ghislainventre.manhwacalendar.data.TitleMatch
+import com.ghislainventre.manhwacalendar.tr
 
 @Composable
 fun SearchScreen(
@@ -64,18 +65,18 @@ fun SearchScreen(
     }
     LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item(key = "header") {
-            ScreenHeader("Rechercher") { SettingsAction(onSettings) }
+            ScreenHeader(tr("Rechercher", "Search")) { SettingsAction(onSettings) }
         }
         item(key = "field") {
             TextField(
                 value = vm.query,
                 onValueChange = vm::onQueryChange,
-                placeholder = { Text("Titre d'un manhwa…") },
+                placeholder = { Text(tr("Titre d'un manhwa…", "Manhwa title…")) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (vm.query.isNotEmpty()) {
                         IconButton(onClick = { vm.onQueryChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Effacer")
+                            Icon(Icons.Default.Clear, contentDescription = tr("Effacer", "Clear"))
                         }
                     }
                 },
@@ -98,14 +99,14 @@ fun SearchScreen(
                 Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
                     Text(
                         if (enabled.isEmpty()) {
-                            "Aucun site activé pour la recherche."
+                            tr("Aucun site activé pour la recherche.", "No site enabled for search.")
                         } else {
-                            "Recherche sur " + enabled.joinToString(", ") { it.name }
+                            tr("Recherche sur ", "Searching ") + enabled.joinToString(", ") { it.name }
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    TextButton(onClick = onSettings, contentPadding = PaddingValues(0.dp)) { Text("Gérer les sites") }
+                    TextButton(onClick = onSettings, contentPadding = PaddingValues(0.dp)) { Text(tr("Gérer les sites", "Manage sites")) }
                 }
             }
             recommendationItems(vm, followedIds)
@@ -122,9 +123,9 @@ fun SearchScreen(
                     followed = followed,
                     onFollow = { vm.follow(group) },
                     reason = if (group.hits.size > 1) {
-                        "Sur ${group.hits.size} sites · lu sur ${group.best.sourceLabel}"
+                        tr("Sur ${group.hits.size} sites · lu sur ${group.best.sourceLabel}", "On ${group.hits.size} sites · read on ${group.best.sourceLabel}")
                     } else {
-                        "Sur ${group.best.sourceLabel}"
+                        tr("Sur ", "On ") + group.best.sourceLabel
                     },
                 )
             }
@@ -136,19 +137,19 @@ fun SearchScreen(
 private fun LazyListScope.recommendationItems(vm: MainViewModel, followedIds: Set<String>) {
     item(key = "reco-title") {
         Column {
-            SectionTitle("Pour toi") {
+            SectionTitle(tr("Pour toi", "For you")) {
                 if (followedIds.isNotEmpty()) {
                     IconButton(onClick = { vm.loadRecommendations(force = true) }, enabled = !vm.recommendationsLoading) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Actualiser les suggestions")
+                        Icon(Icons.Default.Refresh, contentDescription = tr("Actualiser les suggestions", "Refresh suggestions"))
                     }
                 }
             }
             val note = when {
-                followedIds.isEmpty() -> "Suis quelques séries : des suggestions apparaîtront ici selon leurs genres."
+                followedIds.isEmpty() -> tr("Suis quelques séries : des suggestions apparaîtront ici selon leurs genres.", "Follow a few series and suggestions based on their genres will show up here.")
                 vm.recommendationsLoading -> null
-                vm.recommendationsError != null -> "Suggestions indisponibles : ${vm.recommendationsError}"
-                vm.recommendations.isEmpty() -> "Pas de suggestion pour l'instant."
-                else -> "D'après les genres de tes séries, parmi les manhwa les plus suivis sur MangaDex"
+                vm.recommendationsError != null -> tr("Suggestions indisponibles : ", "Suggestions unavailable: ") + vm.recommendationsError
+                vm.recommendations.isEmpty() -> tr("Pas de suggestion pour l'instant.", "No suggestions yet.")
+                else -> tr("D'après les genres de tes séries, parmi les manhwa les plus suivis sur MangaDex", "Based on your series' genres, among the most followed manhwa on MangaDex")
             }
             if (vm.recommendationsLoading) {
                 CircularProgressIndicator(Modifier.padding(horizontal = 20.dp, vertical = 8.dp).size(24.dp), strokeWidth = 2.dp)
@@ -169,7 +170,7 @@ private fun LazyListScope.recommendationItems(vm: MainViewModel, followedIds: Se
                 reco.manga,
                 followed = reco.manga.id in followedIds,
                 onFollow = { vm.follow(reco.manga) },
-                reason = "Comme tes séries : " + reco.reasons.joinToString(", ") { tagLabel(it) },
+                reason = tr("Comme tes séries : ", "Like your series: ") + reco.reasons.joinToString(", ") { tagLabel(it) },
             )
         }
     }
@@ -192,11 +193,11 @@ private fun SearchProgress(results: List<SiteResult>, empty: Boolean) {
         Text(
             listOfNotNull(
                 when {
-                    searching -> "Recherche sur ${results.size} sites… ($done/${results.size})"
-                    empty -> "Aucun résultat"
-                    else -> "Résultats de ${results.size - failed} sites"
+                    searching -> tr("Recherche sur ${results.size} sites…", "Searching ${results.size} sites…") + " ($done/${results.size})"
+                    empty -> tr("Aucun résultat", "No results")
+                    else -> tr("Résultats de ${results.size - failed} sites", "Results from ${results.size - failed} sites")
                 },
-                failed.takeIf { it > 0 }?.let { plural(it, "site indisponible", "sites indisponibles") },
+                failed.takeIf { it > 0 }?.let { plural(it, tr("site indisponible", "site unavailable"), tr("sites indisponibles", "sites unavailable")) },
             ).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -248,10 +249,10 @@ private fun SearchResultRow(manga: MangaSummary, followed: Boolean, onFollow: ()
             FilledTonalButton(onClick = {}, enabled = false, contentPadding = PaddingValues(horizontal = 12.dp)) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Suivi")
+                Text(tr("Suivi", "Following"))
             }
         } else {
-            Button(onClick = onFollow, contentPadding = PaddingValues(horizontal = 16.dp)) { Text("Suivre") }
+            Button(onClick = onFollow, contentPadding = PaddingValues(horizontal = 16.dp)) { Text(tr("Suivre", "Follow")) }
         }
     }
 }

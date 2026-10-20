@@ -9,11 +9,11 @@ import java.util.Locale
 
 /** Lecture des dates affichées par les sites Madara (« October 3, 2026 », « 2 hours ago »…). */
 object MadaraDates {
-    private val formats = listOf("MMMM d, yyyy", "MMM d, yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "d MMMM yyyy", "MM/dd/yyyy")
+    private val formats = listOf("MMMM d, yyyy", "MMM d, yyyy", "dd/MM/yyyy", "yyyy-MM-dd", "d MMMM yyyy", "d MMM yyyy", "MM/dd/yyyy")
         .map { DateTimeFormatter.ofPattern(it, Locale.ENGLISH) } +
         // Sites français : « 16 mai 2025 », « 3 oct. 2026 ».
         listOf("d MMMM yyyy", "d MMM yyyy", "MMMM d, yyyy").map { DateTimeFormatter.ofPattern(it, Locale.FRENCH) }
-    private val relative = Regex("""(\d+|an?)\s*(sec|second|min|minute|hour|day|week|month|year)s?\s+ago""", RegexOption.IGNORE_CASE)
+    private val relative = Regex("""(\d+|an?)\s*(sec|second|min|minute|hr|hour|day|wk|week|month|yr|year)s?\s+ago""", RegexOption.IGNORE_CASE)
     /** « il y a 2 heures », « il y a un jour ». */
     private val relativeFr = Regex(
         """il y a\s+(\d+|une?)\s*(sec|seconde|min|minute|heure|h|jour|j|semaine|mois|an|année)""",
@@ -47,9 +47,9 @@ object MadaraDates {
             val unit = when (m.groupValues[2].lowercase(Locale.ENGLISH)) {
                 "sec", "second" -> Duration.ofSeconds(n)
                 "min", "minute" -> Duration.ofMinutes(n)
-                "hour" -> Duration.ofHours(n)
+                "hr", "hour" -> Duration.ofHours(n)
                 "day" -> Duration.ofDays(n)
-                "week" -> Duration.ofDays(7 * n)
+                "wk", "week" -> Duration.ofDays(7 * n)
                 "month" -> Duration.ofDays(30 * n)
                 else -> Duration.ofDays(365 * n)
             }
