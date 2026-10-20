@@ -6,9 +6,10 @@ data class SeriesHit(val manga: MangaSummary, val responseMs: Long, val rank: In
 /**
  * Une même série trouvée sur un ou plusieurs sites. [best] est le site qui va le plus loin
  * (dernier chapitre le plus élevé), puis le plus rapide ; les autres servent de secours.
+ * Avec [preferFrench], un site en français passe avant les sites anglais, même s'ils sont plus avancés.
  */
-class SeriesGroup(val key: String, hits: List<SeriesHit>) {
-    val hits: List<SeriesHit> = hits.sortedWith(SearchGrouping.PREFERENCE)
+class SeriesGroup(val key: String, hits: List<SeriesHit>, preferFrench: Boolean = false) {
+    val hits: List<SeriesHit> = hits.sortedWith(SearchGrouping.preference(preferFrench))
     val best: MangaSummary get() = hits.first().manga
     val title: String get() = best.title
     val coverUrl: String? get() = hits.firstNotNullOfOrNull { it.manga.coverUrl }
@@ -23,11 +24,24 @@ object SearchGrouping {
     fun latestNumber(manga: MangaSummary): Double? =
         manga.latestChapter?.let(MadaraDates::chapterNumber)?.toDoubleOrNull()
 
-    val PREFERENCE: Comparator<SeriesHit> =
-        compareByDescending<SeriesHit> { latestNumber(it.manga) ?: -1.0 }.thenBy { it.responseMs }
+    private fun isFrench(hit: SeriesHit) = hit.manga.pageUrl?.let(MadaraSource::isFrench) == true
 
-    /** [results] : pour chaque site qui a répondu, ses résultats et son temps de réponse en millisecondes. */
-    fun group(results: List<Pair<List<MangaSummary>, Long>>): List<SeriesGroup> {
+    /** Le plus avancé, puis, à égalité, un site français, puis le plus rapide. */
+    private val BY_PROGRESS: Comparator<SeriesHit> =
+        compareByDescending<SeriesHit> { latestNumber(it.manga) ?: -1.0 }
+            .thenByDescending { isFrench(it) }
+            .thenBy { it.responseMs }
+
+    /** Les scans anglais ont presque toujours de l'avance : sans cette règle, un lecteur français suivait en anglais. */
+    private val FRENCH_FIRST: Comparator<SeriesHit> = compareByDescending<SeriesHit> { isFrench(it) }.then(BY_PROGRESS)
+
+    fun preference(preferFrench: Boolean): Comparator<SeriesHit> = if (preferFrench) FRENCH_FIRST else BY_PROGRESS
+
+    /**
+     * [results] : pour chaque site qui a répondu, ses résultats et son temps de réponse en millisecondes.
+     * [preferFrench] : chapitres voulus en français seulement.
+     */
+    fun group(results: List<Pair<List<MangaSummary>, Long>>, preferFrench: Boolean = false): List<SeriesGroup> {
         val byKey = LinkedHashMap<String, MutableList<SeriesHit>>()
         results.forEach { (items, ms) ->
             items.forEachIndexed { rank, manga ->
@@ -37,7 +51,7 @@ object SearchGrouping {
             }
         }
         // Les séries présentes sur le plus de sites d'abord : ce sont presque toujours celles cherchées.
-        return byKey.map { (key, hits) -> SeriesGroup(key, hits.distinctBy { it.manga.id }) }
+        return byKey.map { (key, hits) -> SeriesGroup(key, hits.distinctBy { it.manga.id }, preferFrench) }
             .sortedWith(compareByDescending<SeriesGroup> { it.hits.size }.thenBy { g -> g.hits.minOf { it.rank } })
     }
 

@@ -32,11 +32,14 @@ class MangaDexApi {
         return parseManga(json.getJSONObject("data"))
     }
 
-    /** Titres anglais et romanisés d'une série (titre principal puis variantes), pour la chercher sur les sites. */
+    /**
+     * Titres anglais et romanisés d'une série (titre principal puis variantes), pour la chercher sur les sites,
+     * puis ses titres français : certains sites français affichent la série sous son nom français.
+     */
     suspend fun titles(id: String): List<String> {
         val attrs = get("/manga/$id", emptyList()).getJSONObject("data").getJSONObject("attributes")
         val all = listOfNotNull(attrs.optJSONObject("title")) + attrs.optJSONArray("altTitles")?.objects().orEmpty()
-        return listOf("en", "ko-ro", "ja-ro").flatMap { lang -> all.mapNotNull { it.optStringOrNull(lang) } }.distinct()
+        return listOf("en", "ko-ro", "ja-ro", "fr").flatMap { lang -> all.mapNotNull { it.optStringOrNull(lang) } }.distinct()
     }
 
     /** Fiches de plusieurs séries en une requête (100 au plus), avec leurs genres. */

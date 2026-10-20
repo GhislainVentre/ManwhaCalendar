@@ -42,7 +42,10 @@ class MadaraSource(private val scraper: WebPageScraper) {
         var newerDate = Instant.now()
         val host = runCatching { java.net.URI(pageUrl).host }.getOrNull()?.removePrefix("www.")
         val language = if (host in FRENCH_HOSTS) "fr" else "en"
-        val chapters = json.getJSONArray("ch").objects().mapNotNull { c ->
+        val entries = json.getJSONArray("ch").objects()
+        // Sushiscan liste aussi les tomes (« Volume 1 ») : leur numéro se confondait avec celui des chapitres.
+        val hasChapters = entries.any { !MadaraDates.isVolume(it.optString("n")) }
+        val chapters = entries.filter { !hasChapters || !MadaraDates.isVolume(it.optString("n")) }.mapNotNull { c ->
             val href = c.optStringOrNull("u") ?: return@mapNotNull null
             val label = c.optString("n").trim()
             val date = MadaraDates.parse(c.optString("d")) ?: newerDate

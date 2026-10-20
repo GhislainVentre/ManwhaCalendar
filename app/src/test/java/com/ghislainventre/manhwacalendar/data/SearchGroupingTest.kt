@@ -43,4 +43,25 @@ class SearchGroupingTest {
         assertEquals("fast", group.best.siteName)
         assertEquals(listOf("slow", "behind"), group.alternates.map { it.siteName })
     }
+
+    @Test
+    fun frenchReaderGetsFrenchSiteEvenWhenBehind() {
+        val results = listOf(
+            listOf(web("toongod.org", "Hound", "Chapter 120")) to 500L,
+            listOf(web("sushiscan.net", "Hound", "Chapitre 95")) to 3000L,
+        )
+        assertEquals("toongod.org", SearchGrouping.group(results).single().best.siteName)
+        assertEquals("sushiscan.net", SearchGrouping.group(results, preferFrench = true).single().best.siteName)
+    }
+
+    @Test
+    fun frenchSiteWinsATie() {
+        val group = SearchGrouping.group(
+            listOf(
+                listOf(web("toongod.org", "Hound", "Chapter 95")) to 500L,
+                listOf(web("lelmanga.com", "Hound", "Chapitre 95")) to 3000L,
+            ),
+        ).single()
+        assertEquals("lelmanga.com", group.best.siteName)
+    }
 }

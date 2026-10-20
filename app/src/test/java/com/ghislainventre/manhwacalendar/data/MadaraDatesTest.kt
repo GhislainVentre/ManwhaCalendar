@@ -1,7 +1,9 @@
 package com.ghislainventre.manhwacalendar.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Duration
 import java.time.Instant
@@ -56,5 +58,27 @@ class MadaraDatesTest {
     fun frenchChapterLabels() {
         assertEquals("206", MadaraDates.chapterNumber(" Chapitre 206"))
         assertNull(MadaraDates.chapterTitle("Chapitre 206"))
+    }
+
+    @Test
+    fun frenchDateVariants() {
+        assertEquals(Instant.parse("2026-10-01T12:00:00Z"), parse("1er octobre 2026"))
+        assertEquals(Instant.parse("2026-10-03T12:00:00Z"), parse("3 oct 2026"))
+        assertEquals(Instant.parse("2026-09-12T12:00:00Z"), parse("12 sept 2026"))
+    }
+
+    @Test
+    fun chapterNumberFollowsChapterKeyword() {
+        assertEquals("15", MadaraDates.chapterNumber("Saison 2 - Chapitre 15"))
+        assertEquals("45.5", MadaraDates.chapterNumber("Chapitre 45,5"))
+        assertEquals("12", MadaraDates.chapterNumber("Ep. 12"))
+        assertEquals("120", MadaraDates.chapterNumber("Solo Leveling 120"))
+    }
+
+    @Test
+    fun volumesAreNotChapters() {
+        assertTrue(MadaraDates.isVolume(" Volume 1"))
+        assertTrue(MadaraDates.isVolume("Tome 12"))
+        assertFalse(MadaraDates.isVolume("Chapitre 1"))
     }
 }

@@ -15,6 +15,11 @@ class TitleMatchTest {
     }
 
     @Test
+    fun ignoresAccents() {
+        assertTrue(TitleMatch.matches("L'Épée du Héros", listOf("L'Epee du Heros")))
+    }
+
+    @Test
     fun rejectsOtherSeries() {
         assertFalse(TitleMatch.matches("Revenge of the Iron-Blooded Sword Hound Side Story", titles))
         assertFalse(TitleMatch.matches("The", titles))
