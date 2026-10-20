@@ -9,6 +9,7 @@ import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -46,26 +47,31 @@ object AppUpdater {
         val partial = File(dir, "ManhwaCalendar.apk.part")
         val connection = open(APK_URL)
         try {
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) error(tr("erreur ", "error ") + connection.responseCode)
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) throw IOException(tr("erreur ", "error ") + connection.responseCode)
             val total = connection.contentLengthLong
+            var received = 0L
             connection.inputStream.use { input ->
                 partial.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
-                    var done = 0L
                     var percent = -1L
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
-                        done += read
+                        received += read
                         // Un appel par pour-cent suffit pour la barre de progression.
-                        if (total > 0 && done * 100 / total != percent) {
-                            percent = done * 100 / total
-                            onProgress(done.toFloat() / total)
+                        if (total > 0 && received * 100 / total != percent) {
+                            percent = received * 100 / total
+                            onProgress(received.toFloat() / total)
                         }
                     }
                 }
             }
+            // Connexion coupée en route : un APK tronqué ferait échouer l'installation (« erreur d'analyse »).
+            if (total > 0 && received != total) throw IOException(tr("téléchargement interrompu, réessaie", "download interrupted, try again"))
+        } catch (e: Exception) {
+            partial.delete()
+            throw e
         } finally {
             connection.disconnect()
         }

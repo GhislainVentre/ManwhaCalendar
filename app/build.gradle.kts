@@ -67,4 +67,6 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     testImplementation("junit:junit:4.13.2")
+    // Le org.json d'Android n'existe pas hors du téléphone : la vraie bibliothèque pour les tests.
+    testImplementation("org.json:json:20240303")
 }

@@ -9,6 +9,12 @@ on:
 permissions:
   contents: write
 
+# Sur main, les builds passent l'un après l'autre : un build plus ancien qui finirait en dernier
+# republierait une version plus vieille de l'APK. Sur les autres branches, seul le dernier compte.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
