@@ -11,6 +11,7 @@ import com.ghislainventre.manhwacalendar.data.Chapter
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.MangaSummary
+import com.ghislainventre.manhwacalendar.data.Network
 import com.ghislainventre.manhwacalendar.data.Recommendation
 import com.ghislainventre.manhwacalendar.data.SearchGrouping
 import com.ghislainventre.manhwacalendar.data.SeriesGroup
@@ -77,6 +78,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** [userInitiated] : l'utilisateur a demandé la vérification, on lui confirme aussi quand rien n'a changé. */
     fun refresh(userInitiated: Boolean = false) {
         if (refreshing) return
+        // Hors ligne, chaque série échouerait : on ne lance rien, et on ne le dit que si on l'a demandé.
+        if (!Network.isOnline(getApplication<Application>())) {
+            if (userInitiated) message = UiMessage("Pas de connexion internet")
+            return
+        }
         refreshing = true
         viewModelScope.launch {
             try {
@@ -90,7 +96,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                message = UiMessage("Vérification impossible : ${e.message}")
+                message = UiMessage("Vérification impossible : ${Network.describe(e)}")
             } finally {
                 refreshing = false
             }
@@ -110,6 +116,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun search() {
         val q = query.trim()
         if (q.isEmpty()) return
+        if (!Network.isOnline(getApplication<Application>())) {
+            message = UiMessage("Pas de connexion internet")
+            return
+        }
         val sources = repository.searchSources()
         if (sources.isEmpty()) {
             message = UiMessage("Aucun site activé (Réglages → Sites de recherche)")
@@ -127,7 +137,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        SiteResult(source.name, loading = false, error = e.message ?: "erreur inconnue")
+                        SiteResult(source.name, loading = false, error = Network.describe(e))
                     }
                     siteResults = siteResults.map { if (it.site == source.name) result else it }
                 }
@@ -151,7 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                recommendationsError = e.message ?: "erreur inconnue"
+                recommendationsError = Network.describe(e)
                 recommendationsKey = null
             } finally {
                 recommendationsLoading = false
@@ -225,7 +235,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (userInitiated) message = UiMessage("Vérification impossible : ${e.message}")
+                if (userInitiated) message = UiMessage("Vérification impossible : ${Network.describe(e)}")
             }
         }
     }
@@ -247,7 +257,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                message = UiMessage("Téléchargement impossible : ${e.message}")
+                message = UiMessage("Téléchargement impossible : ${Network.describe(e)}")
             } finally {
                 updateProgress = null
             }
