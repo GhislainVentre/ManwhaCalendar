@@ -91,6 +91,9 @@ class MadaraSource(private val scraper: WebPageScraper) {
         )
 
         /** Sites dont les chapitres sont en français ; les autres publient en anglais. */
+        fun isFrench(url: String): Boolean =
+            runCatching { java.net.URI(url).host }.getOrNull()?.removePrefix("www.") in FRENCH_HOSTS
+
         private val FRENCH_HOSTS = setOf(
             "sushiscan.net", "lelmanga.com", "pantheon-scan.com", "mangas-origines.fr",
             "manga-scantrad.io", "astral-manga.fr", "toonfr.com",
