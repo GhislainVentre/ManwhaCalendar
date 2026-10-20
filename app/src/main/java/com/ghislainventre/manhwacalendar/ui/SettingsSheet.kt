@@ -91,7 +91,10 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
             }
 
             item(key = "language-title") {
-                SheetSection(tr("Langue des chapitres", "Chapter language"), tr("Pour les séries suivies sur MangaDex", "For series followed on MangaDex"))
+                SheetSection(
+                    tr("Langue des chapitres", "Chapter language"),
+                    tr("En français seulement, les sites français passent avant les sites anglais", "With French only, French sites come before English ones"),
+                )
             }
             items(ChapterLanguage.entries, key = { it.name }) { lang ->
                 Row(
@@ -145,7 +148,7 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                         onValueChange = { address = it },
                         label = { Text(tr("Ajouter un site", "Add a site")) },
                         placeholder = { Text(tr("exemple.com", "example.com")) },
-                        supportingText = { Text(tr("Sites WordPress au thème Madara", "WordPress sites using the Madara theme")) },
+                        supportingText = { Text(tr("Sites WordPress (thèmes Madara ou MangaReader)", "WordPress sites (Madara or MangaReader theme)")) },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),

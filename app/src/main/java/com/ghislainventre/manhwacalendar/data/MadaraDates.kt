@@ -19,7 +19,17 @@ object MadaraDates {
         """il y a\s+(\d+|une?)\s*(sec|seconde|min|minute|heure|h|jour|j|semaine|mois|an|année)""",
         RegexOption.IGNORE_CASE,
     )
-    private val number = Regex("""(\d+(?:\.\d+)?)""")
+    private val number = Regex("""(\d+(?:[.,]\d+)?)""")
+    /** Numéro qui suit le mot « chapitre » : « Saison 2 - Chapitre 15 » est le chapitre 15, pas le 2. */
+    private val numberAfterKeyword = Regex(
+        """(?<!\p{L})(?:chapter|chapitre|chap\.?|ch\.?|episode|épisode|ep\.?)\s*(\d+(?:[.,]\d+)?)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val volume = Regex("""^\s*(volume|vol\.?|tome)\s*\d+\s*$""", RegexOption.IGNORE_CASE)
+    /** « 1er octobre 2026 ». */
+    private val firstOfMonth = Regex("""\b1er\b""")
+    /** Mois abrégés sans point (« 3 oct 2026 ») : Java les attend avec le point. */
+    private val frenchShortMonth = Regex("""(?<=\s)(janv|févr|fevr|avr|juil|sept|oct|nov|déc|dec)(?=\s)""")
 
     fun parse(text: String, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): Instant? {
         val t = text.trim()
@@ -55,16 +65,27 @@ object MadaraDates {
             }
             return now.minus(unit)
         }
+        val french = t.lowercase(Locale.FRENCH).replace(firstOfMonth, "1").replace(frenchShortMonth) { m ->
+            when (m.value) {
+                "fevr" -> "févr."
+                "dec" -> "déc."
+                else -> m.value + "."
+            }
+        }
         for (f in formats) {
             val date = runCatching { LocalDate.parse(t, f) }.getOrNull()
-                ?: runCatching { LocalDate.parse(t.lowercase(Locale.FRENCH), f) }.getOrNull() ?: continue
+                ?: runCatching { LocalDate.parse(french, f) }.getOrNull() ?: continue
             return date.atTime(12, 0).atZone(zone).toInstant()
         }
         return null
     }
 
-    /** « Chapter 45.5 - Fin » → « 45.5 ». */
-    fun chapterNumber(label: String): String? = number.find(label)?.groupValues?.get(1)
+    /** « Chapter 45.5 - Fin » → « 45.5 » ; « Chapitre 45,5 » → « 45.5 ». */
+    fun chapterNumber(label: String): String? =
+        (numberAfterKeyword.find(label) ?: number.find(label))?.groupValues?.get(1)?.replace(',', '.')
+
+    /** Un tome entier (« Volume 3 », « Tome 3 ») plutôt qu'un chapitre. */
+    fun isVolume(label: String): Boolean = volume.matches(label)
 
     /** « Chapter 45 - The End » → « The End » ; « Chapter 45 » → null. */
     fun chapterTitle(label: String): String? =

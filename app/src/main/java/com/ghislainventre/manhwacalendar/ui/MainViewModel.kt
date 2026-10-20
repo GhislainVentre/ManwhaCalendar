@@ -48,7 +48,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val searching: Boolean get() = siteResults.any { it.loading }
     /** Chaque série une seule fois, tous sites confondus, avec le meilleur site déjà choisi. */
     val seriesResults: List<SeriesGroup>
-        get() = SearchGrouping.group(siteResults.filter { !it.loading && it.error == null }.map { it.items to it.elapsedMs })
+        get() = SearchGrouping.group(
+            siteResults.filter { !it.loading && it.error == null }.map { it.items to it.elapsedMs },
+            preferFrench = language.value == ChapterLanguage.FR,
+        )
     private var searchJob: Job? = null
 
     var recommendations by mutableStateOf<List<Recommendation>>(emptyList())

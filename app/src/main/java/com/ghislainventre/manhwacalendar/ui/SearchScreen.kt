@@ -43,6 +43,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ghislainventre.manhwacalendar.data.MadaraSource
 import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Site
 import com.ghislainventre.manhwacalendar.data.Source
@@ -122,15 +123,24 @@ fun SearchScreen(
                     group.best.copy(coverUrl = group.coverUrl),
                     followed = followed,
                     onFollow = { vm.follow(group) },
-                    reason = if (group.hits.size > 1) {
-                        tr("Sur ${group.hits.size} sites · lu sur ${group.best.sourceLabel}", "On ${group.hits.size} sites · read on ${group.best.sourceLabel}")
-                    } else {
-                        tr("Sur ", "On ") + group.best.sourceLabel
-                    },
+                    reason = (
+                        if (group.hits.size > 1) {
+                            tr("Sur ${group.hits.size} sites · lu sur ${group.best.sourceLabel}", "On ${group.hits.size} sites · read on ${group.best.sourceLabel}")
+                        } else {
+                            tr("Sur ", "On ") + group.best.sourceLabel
+                        }
+                    ) + languageHint(group.best),
                 )
             }
         }
     }
+}
+
+/** Langue des chapitres d'un site web : un lecteur français doit voir d'emblée s'il suivra en VF ou en anglais. */
+private fun languageHint(manga: MangaSummary): String = when {
+    manga.source != Source.WEB || manga.pageUrl == null -> ""
+    MadaraSource.isFrench(manga.pageUrl) -> tr(" · VF", " · French")
+    else -> tr(" · en anglais", " · English")
 }
 
 /** « Pour toi » : manhwa populaires qui partagent les genres des séries suivies. */

@@ -293,8 +293,23 @@ class SeriesRepository(
         val alternates: List<Mirror>,
     )
 
-    /** Page de la série sur son site, ou sur le premier site de secours qui répond. */
+    /**
+     * Page de la série sur son site, ou sur le premier site de secours qui répond. En français seulement,
+     * une série suivie sur un site anglais passe sur sa page d'un site français quand elle en a une.
+     */
     private suspend fun loadWebPage(series: FollowedSeries): Pair<MadaraSource.SeriesPage, Mirror?> {
+        if (_language.value == ChapterLanguage.FR && !MadaraSource.isFrench(series.url)) {
+            for (mirror in series.alternates.filter { MadaraSource.isFrench(it.url) }) {
+                try {
+                    val page = madara.series(mirror.url)
+                    if (page.chapters.isNotEmpty()) return page to mirror
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Site français suivant, puis le site habituel.
+                }
+            }
+        }
         val failure = try {
             return madara.series(series.url) to null
         } catch (e: CancellationException) {

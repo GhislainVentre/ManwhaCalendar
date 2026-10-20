@@ -51,9 +51,12 @@ data class Chapter(
         /**
          * Du plus récent au plus ancien, d'après le numéro : les dates ne suffisent pas (plusieurs chapitres
          * mis en ligne le même jour, anciens chapitres réimportés). Les chapitres sans numéro vont à la fin.
+         * À numéro égal, la version française passe avant : c'est elle qui est gardée en « français + anglais ».
          */
         val NEWEST_FIRST: Comparator<Chapter> =
-            compareByDescending<Chapter> { it.number?.toDoubleOrNull() }.thenByDescending { it.readableAt }
+            compareByDescending<Chapter> { it.number?.toDoubleOrNull() }
+                .thenByDescending { it.language == "fr" }
+                .thenByDescending { it.readableAt }
     }
 }
 
