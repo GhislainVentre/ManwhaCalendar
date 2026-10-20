@@ -156,7 +156,10 @@ class SeriesRepository(
 
     fun setLanguage(language: ChapterLanguage) {
         _language.value = language
-        prefs.edit().putString(KEY_LANGUAGE, language.name).apply()
+        val edit = prefs.edit().putString(KEY_LANGUAGE, language.name)
+        // Nouvelle langue : les séries délaissées doivent pouvoir chercher tout de suite un site dans cette langue.
+        prefs.all.keys.filter { it.startsWith(WEB_LOOKUP_PREFIX) }.forEach(edit::remove)
+        edit.apply()
     }
 
     /** Met à jour toutes les séries et renvoie les nouveaux chapitres détectés. */
@@ -190,7 +193,8 @@ class SeriesRepository(
         val fetched = when (series.source) {
             Source.MANGADEX -> {
                 val manga = runCatching { api.manga(series.id) }.getOrNull()
-                val chapters = api.latestChapters(series.id, _language.value.codes)
+                val wanted = _language.value.codes
+                val chapters = api.latestChapters(series.id, wanted)
                 val status = manga?.status ?: series.status
                 // Beaucoup de séries n'ont presque plus de chapitres sur MangaDex (retraits, équipes parties) :
                 // on bascule alors sur un site de lecture qui en a de plus récents.
@@ -198,7 +202,14 @@ class SeriesRepository(
                 if (web != null) {
                     Fetched(manga?.title, manga?.coverUrl, status, web.page.chapters.sortedByDescending { it.readableAt }, web)
                 } else {
-                    Fetched(manga?.title, manga?.coverUrl, status, chapters)
+                    // Rien dans la langue choisie, ni sur les sites : mieux vaut les chapitres des autres langues
+                    // qu'une fiche vide (beaucoup de séries n'ont aucun chapitre français sur MangaDex).
+                    val shown = if (chapters.isEmpty() && wanted != ChapterLanguage.FR_EN.codes) {
+                        api.latestChapters(series.id, ChapterLanguage.FR_EN.codes)
+                    } else {
+                        chapters
+                    }
+                    Fetched(manga?.title, manga?.coverUrl, status, shown)
                 }
             }
             Source.WEB -> {
@@ -206,7 +217,8 @@ class SeriesRepository(
                 Fetched(page.title, page.coverUrl, null, page.chapters.sortedByDescending { it.readableAt }, mirror = mirror)
             }
         }
-        val chapters = fetched.chapters
+        // Une réponse vide (site ou API en difficulté) ne doit pas effacer les chapitres déjà connus.
+        val chapters = fetched.chapters.ifEmpty { series.recentChapters }
         val sorted = chapters.sortedWith(Chapter.NEWEST_FIRST)
         val status = fetched.status ?: series.status
         val estimate = ReleaseEstimator.estimate(chapters, finished = status == "completed" || status == "cancelled")
@@ -302,7 +314,10 @@ class SeriesRepository(
         prefs.edit().putLong(WEB_LOOKUP_PREFIX + series.id, now.toEpochMilli()).apply()
 
         val titles = (orEmptyOnError { api.titles(series.id) } + series.title).distinctBy(TitleMatch::normalize)
+        // En français, les sites français passent en premier : leur page est retenue si elle va assez loin.
+        val french = "fr" in _language.value.codes && "en" !in _language.value.codes
         val sites = _sites.value.filter { it.enabled && it.name != MANGADEX_NAME }
+            .sortedByDescending { french && MadaraSource.isFrench(it.baseUrl) }
         val hits = coroutineScope {
             sites.map { site ->
                 async {
