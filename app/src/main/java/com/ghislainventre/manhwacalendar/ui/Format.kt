@@ -1,31 +1,37 @@
 package com.ghislainventre.manhwacalendar.ui
 
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
+import com.ghislainventre.manhwacalendar.isFrenchUi
+import com.ghislainventre.manhwacalendar.tr
+import com.ghislainventre.manhwacalendar.uiLocale
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 
-private val dayFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH)
-private val shortFormatter = DateTimeFormatter.ofPattern("EEE d MMM", Locale.FRENCH)
-private val dayMonthFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.FRENCH)
-private val weekdayFormatter = DateTimeFormatter.ofPattern("EEE", Locale.FRENCH)
+// Formats relus à chaque appel : ils suivent la langue du téléphone.
+private val dayFormatter get() = DateTimeFormatter.ofPattern(tr("EEEE d MMMM", "EEEE, MMMM d"), uiLocale)
+private val shortFormatter get() = DateTimeFormatter.ofPattern(tr("EEE d MMM", "EEE, MMM d"), uiLocale)
+private val dayMonthFormatter get() = DateTimeFormatter.ofPattern(tr("d MMM", "MMM d"), uiLocale)
+private val weekdayFormatter get() = DateTimeFormatter.ofPattern("EEE", uiLocale)
 
 fun Instant.localDate(): LocalDate = atZone(ZoneId.systemDefault()).toLocalDate()
 
-private fun String.capitalized() = replaceFirstChar { it.titlecase(Locale.FRENCH) }
+private fun String.capitalized() = replaceFirstChar { it.titlecase(uiLocale) }
+
+private val todayLabel get() = tr("Aujourd'hui", "Today")
+private val tomorrowLabel get() = tr("Demain", "Tomorrow")
 
 fun dayHeader(date: LocalDate, today: LocalDate = LocalDate.now()): String = when (date) {
-    today -> "Aujourd'hui"
-    today.plusDays(1) -> "Demain"
-    today.minusDays(1) -> "Hier"
+    today -> todayLabel
+    today.plusDays(1) -> tomorrowLabel
+    today.minusDays(1) -> tr("Hier", "Yesterday")
     else -> longDate(date)
 }
 
-/** « Jeudi 9 octobre ». */
+/** « Jeudi 9 octobre », « Thursday, October 9 ». */
 fun longDate(date: LocalDate): String = dayFormatter.format(date).capitalized()
 
 /** « Jeu », sans le point d'abréviation. */
@@ -37,11 +43,11 @@ fun shortDate(instant: Instant): String = shortFormatter.format(instant.localDat
 fun untilLabel(date: LocalDate, today: LocalDate = LocalDate.now()): String {
     val days = ChronoUnit.DAYS.between(today, date)
     return when {
-        days <= 0L -> "Aujourd'hui"
-        days == 1L -> "Demain"
-        days < 7L -> "Dans $days jours"
-        days < 14L -> "Dans 1 semaine"
-        else -> "Dans ${days / 7} semaines"
+        days <= 0L -> todayLabel
+        days == 1L -> tomorrowLabel
+        days < 7L -> tr("Dans $days jours", "In $days days")
+        days < 14L -> tr("Dans 1 semaine", "In 1 week")
+        else -> tr("Dans ${days / 7} semaines", "In ${days / 7} weeks")
     }
 }
 
@@ -49,9 +55,9 @@ fun untilLabel(date: LocalDate, today: LocalDate = LocalDate.now()): String {
 fun shortUntil(date: LocalDate, today: LocalDate = LocalDate.now()): String {
     val days = ChronoUnit.DAYS.between(today, date)
     return when {
-        days <= 0L -> "Aujourd'hui"
-        days == 1L -> "Demain"
-        days < 7L -> "Dans $days j"
+        days <= 0L -> todayLabel
+        days == 1L -> tomorrowLabel
+        days < 7L -> tr("Dans $days j", "In $days d")
         else -> dayMonthFormatter.format(date)
     }
 }
@@ -63,44 +69,46 @@ fun dayCaption(date: LocalDate, today: LocalDate = LocalDate.now()): String =
 fun relativePast(instant: Instant, now: Instant = Instant.now()): String {
     val d = Duration.between(instant, now)
     return when {
-        d.toMinutes() < 60 -> "il y a ${d.toMinutes().coerceAtLeast(1)} min"
-        d.toHours() < 24 -> "il y a ${d.toHours()} h"
-        d.toDays() < 30 -> "il y a ${d.toDays()} j"
-        else -> "le ${shortDate(instant)}"
+        d.toMinutes() < 60 -> tr("il y a ${d.toMinutes().coerceAtLeast(1)} min", "${d.toMinutes().coerceAtLeast(1)} min ago")
+        d.toHours() < 24 -> tr("il y a ${d.toHours()} h", "${d.toHours()} h ago")
+        d.toDays() < 30 -> tr("il y a ${d.toDays()} j", "${d.toDays()} d ago")
+        else -> tr("le ", "on ") + shortDate(instant)
     }
 }
 
 fun rhythm(intervalDays: Double?): String? = when {
     intervalDays == null -> null
-    intervalDays < 1.5 -> "quotidien"
-    intervalDays in 5.5..8.5 -> "hebdomadaire"
-    intervalDays in 12.0..16.0 -> "toutes les 2 semaines"
-    intervalDays in 26.0..35.0 -> "mensuel"
-    else -> "tous les ${intervalDays.toInt()} jours env."
+    intervalDays < 1.5 -> tr("quotidien", "daily")
+    intervalDays in 5.5..8.5 -> tr("hebdomadaire", "weekly")
+    intervalDays in 12.0..16.0 -> tr("toutes les 2 semaines", "every 2 weeks")
+    intervalDays in 26.0..35.0 -> tr("mensuel", "monthly")
+    else -> tr("tous les ${intervalDays.toInt()} jours env.", "about every ${intervalDays.toInt()} days")
 }
 
-fun plural(count: Int, singular: String, plural: String) = "$count ${if (count > 1) plural else singular}"
+// En français 0 et 1 sont au singulier, en anglais seul 1 l'est.
+fun plural(count: Int, singular: String, plural: String) =
+    "$count ${if (count > 1 || (count == 0 && !isFrenchUi)) plural else singular}"
 
 fun chapterLabel(number: String?) = number?.let { "Ch. $it" } ?: "Oneshot"
 
 fun nextChapterLabel(s: FollowedSeries): String {
-    val n = s.latestChapter?.number?.toDoubleOrNull() ?: return "Nouveau chapitre"
+    val n = s.latestChapter?.number?.toDoubleOrNull() ?: return tr("Nouveau chapitre", "New chapter")
     return "Ch. ${n.toInt() + 1}"
 }
 
 fun unknownReason(s: FollowedSeries) = when {
-    s.isFinished -> "Série terminée"
-    s.lastCheckedAt == null -> "Pas encore vérifiée"
-    s.recentChapters.size < 2 -> "Pas assez de chapitres pour estimer"
-    else -> "En pause ou rythme irrégulier"
+    s.isFinished -> tr("Série terminée", "Series completed")
+    s.lastCheckedAt == null -> tr("Pas encore vérifiée", "Not checked yet")
+    s.recentChapters.size < 2 -> tr("Pas assez de chapitres pour estimer", "Not enough chapters to estimate")
+    else -> tr("En pause ou rythme irrégulier", "On break or irregular schedule")
 }
 
 fun statusLabel(status: String?) = when (status) {
-    "ongoing" -> "en cours"
-    "completed" -> "terminée"
-    "hiatus" -> "en pause"
-    "cancelled" -> "annulée"
-    else -> "inconnu"
+    "ongoing" -> tr("en cours", "ongoing")
+    "completed" -> tr("terminée", "completed")
+    "hiatus" -> tr("en pause", "on hiatus")
+    "cancelled" -> tr("annulée", "cancelled")
+    else -> tr("inconnu", "unknown")
 }
 
 private val tagLabels = mapOf(
@@ -162,5 +170,5 @@ private val tagLabels = mapOf(
     "Aliens" to "Extraterrestres",
 )
 
-/** Nom français d'un genre MangaDex quand on le connaît, sinon le nom anglais. */
-fun tagLabel(name: String): String = tagLabels[name] ?: name
+/** Nom français d'un genre MangaDex quand on le connaît, sinon le nom anglais (celui de l'API). */
+fun tagLabel(name: String): String = if (isFrenchUi) tagLabels[name] ?: name else name

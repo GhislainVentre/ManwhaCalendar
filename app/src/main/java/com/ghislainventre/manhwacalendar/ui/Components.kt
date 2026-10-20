@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
+import com.ghislainventre.manhwacalendar.tr
 
 /** Couverture arrondie ; tant que l'image n'est pas là (ou si elle échoue), l'initiale du titre sur un dégradé. */
 @Composable
@@ -83,7 +84,7 @@ fun Pill(text: String, container: Color, content: Color, modifier: Modifier = Mo
 
 @Composable
 fun NewBadge(modifier: Modifier = Modifier) = Pill(
-    "NOUVEAU",
+    tr("NOUVEAU", "NEW"),
     container = MaterialTheme.colorScheme.secondary,
     content = MaterialTheme.colorScheme.onSecondary,
     modifier = modifier,
@@ -92,7 +93,7 @@ fun NewBadge(modifier: Modifier = Modifier) = Pill(
 /** Tous les chapitres sont lus : même forme que « NOUVEAU », en vert. */
 @Composable
 fun UpToDateBadge(modifier: Modifier = Modifier) = Pill(
-    "À JOUR",
+    tr("À JOUR", "UP TO DATE"),
     container = UpToDateGreen,
     content = OnUpToDateGreen,
     modifier = modifier,
@@ -101,7 +102,7 @@ fun UpToDateBadge(modifier: Modifier = Modifier) = Pill(
 /** Série rangée dans les terminées par l'utilisateur. */
 @Composable
 fun DoneBadge(modifier: Modifier = Modifier) = Pill(
-    "TERMINÉ",
+    tr("TERMINÉ", "FINISHED"),
     container = Color.Black.copy(alpha = 0.7f),
     content = Color.White,
     modifier = modifier,
@@ -160,7 +161,7 @@ fun RefreshAction(refreshing: Boolean, onRefresh: () -> Unit) {
         if (refreshing) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         } else {
-            Icon(Icons.Default.Refresh, contentDescription = "Vérifier les sorties")
+            Icon(Icons.Default.Refresh, contentDescription = tr("Vérifier les sorties", "Check for new chapters"))
         }
     }
 }
@@ -168,7 +169,7 @@ fun RefreshAction(refreshing: Boolean, onRefresh: () -> Unit) {
 @Composable
 fun SettingsAction(onClick: () -> Unit) {
     IconButton(onClick = onClick) {
-        Icon(Icons.Default.Settings, contentDescription = "Réglages")
+        Icon(Icons.Default.Settings, contentDescription = tr("Réglages", "Settings"))
     }
 }
 

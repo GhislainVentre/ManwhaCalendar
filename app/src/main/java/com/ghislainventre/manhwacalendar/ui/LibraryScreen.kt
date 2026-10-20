@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
+import com.ghislainventre.manhwacalendar.tr
 
 /** Bibliothèque : les séries suivies en mosaïque de couvertures, les nouveautés en premier. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,12 +70,12 @@ fun LibraryScreen(
         ) {
             item(key = "header", span = { GridItemSpan(maxLineSpan) }) {
                 ScreenHeader(
-                    "Mes séries",
+                    tr("Mes séries", "My series"),
                     subtitle = when {
                         followed.isEmpty() -> null
-                        newCount > 0 -> plural(followed.size, "série", "séries") + " · " +
-                            plural(newCount, "nouveauté", "nouveautés")
-                        else -> plural(followed.size, "série suivie", "séries suivies")
+                        newCount > 0 -> plural(followed.size, tr("série", "series"), tr("séries", "series")) + " · " +
+                            plural(newCount, tr("nouveauté", "update"), tr("nouveautés", "updates"))
+                        else -> plural(followed.size, tr("série suivie", "series followed"), tr("séries suivies", "series followed"))
                     },
                     start = 4.dp,
                     end = 0.dp,
@@ -89,7 +90,7 @@ fun LibraryScreen(
                         TextButton(onClick = onMarkAllSeen) {
                             Icon(Icons.Default.Done, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Tout marquer comme vu")
+                            Text(tr("Tout marquer comme vu", "Mark all as seen"))
                         }
                     }
                 }
@@ -98,9 +99,9 @@ fun LibraryScreen(
                 item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                     EmptyState(
                         icon = Icons.Default.Favorite,
-                        title = "Aucune série suivie",
-                        body = "Ajoute tes manhwa préférés depuis la recherche, ils apparaîtront ici.",
-                        action = "Trouver une série",
+                        title = tr("Aucune série suivie", "No series followed yet"),
+                        body = tr("Ajoute tes manhwa préférés depuis la recherche, ils apparaîtront ici.", "Add your favourite manhwa from Search and they will show up here."),
+                        action = tr("Trouver une série", "Find a series"),
                         onAction = onSearch,
                     )
                 }
@@ -110,7 +111,7 @@ fun LibraryScreen(
             if (done.isNotEmpty()) {
                 item(key = "done-title", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        "Terminées (${done.size})",
+                        tr("Terminées", "Finished") + " (${done.size})",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(start = 4.dp, top = 12.dp),
                     )
@@ -148,8 +149,8 @@ private fun LibraryTile(series: FollowedSeries, onOpen: (FollowedSeries) -> Unit
         )
         Text(
             listOfNotNull(
-                series.latestChapter?.let { chapterLabel(it.number) } ?: "Aucun chapitre",
-                series.unreadCount?.takeIf { it > 0 }?.let { plural(it, "non lu", "non lus") },
+                series.latestChapter?.let { chapterLabel(it.number) } ?: tr("Aucun chapitre", "No chapters"),
+                series.unreadCount?.takeIf { it > 0 }?.let { plural(it, tr("non lu", "unread"), tr("non lus", "unread")) },
             ).joinToString(" · "),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

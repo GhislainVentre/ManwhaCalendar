@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ghislainventre.manhwacalendar.data.Chapter
 import com.ghislainventre.manhwacalendar.data.FollowedSeries
+import com.ghislainventre.manhwacalendar.tr
 
 /** Fiche d'une série : grande couverture, prochaine sortie mise en avant, bouton de lecture, chapitres. */
 @Composable
@@ -96,10 +97,10 @@ fun SeriesDetailScreen(
                     Text(
                         when {
                             next != null && next.id != latest?.id ->
-                                if (next.number != null) "Continuer au chapitre ${next.number}" else "Continuer la lecture"
-                            latest == null -> "Ouvrir sur ${series.sourceLabel}"
-                            latest.number != null -> "Lire le chapitre ${latest.number}"
-                            else -> "Lire le dernier chapitre"
+                                if (next.number != null) tr("Continuer au chapitre ", "Continue with chapter ") + next.number else tr("Continuer la lecture", "Continue reading")
+                            latest == null -> tr("Ouvrir sur ", "Open on ") + series.sourceLabel
+                            latest.number != null -> tr("Lire le chapitre ", "Read chapter ") + latest.number
+                            else -> tr("Lire le dernier chapitre", "Read the latest chapter")
                         },
                         style = MaterialTheme.typography.titleSmall,
                     )
@@ -108,7 +109,7 @@ fun SeriesDetailScreen(
                     OutlinedButton(
                         onClick = { onOpenUrl(series.url) },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp).height(48.dp),
-                    ) { Text("Voir la série sur ${series.sourceLabel}") }
+                    ) { Text(tr("Voir la série sur ", "View the series on ") + series.sourceLabel) }
                 }
                 OutlinedButton(
                     onClick = { onSetDone(!series.done) },
@@ -120,23 +121,23 @@ fun SeriesDetailScreen(
                         modifier = Modifier.size(18.dp),
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (series.done) "Reprendre le suivi" else "Marquer comme terminé")
+                    Text(if (series.done) tr("Reprendre le suivi", "Follow again") else tr("Marquer comme terminé", "Mark as finished"))
                 }
                 TextButton(
                     onClick = onUnfollow,
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) { Text("Ne plus suivre") }
+                ) { Text(tr("Ne plus suivre", "Unfollow")) }
             }
         }
         item(key = "chapters-title") {
-            SectionTitle(if (series.recentChapters.size > 1) "Chapitres (${series.recentChapters.size})" else "Chapitres") {
+            SectionTitle(tr("Chapitres", "Chapters") + if (series.recentChapters.size > 1) " (${series.recentChapters.size})" else "") {
                 val unread = series.unreadCount
                 if (series.recentChapters.isNotEmpty() && unread != 0) {
-                    TextButton(onClick = onMarkAllRead) { Text("Tout marquer lu") }
+                    TextButton(onClick = onMarkAllRead) { Text(tr("Tout marquer lu", "Mark all read")) }
                 } else series.lastCheckedAt?.let {
                     Text(
-                        "Vérifié ${relativePast(it)}",
+                        tr("Vérifié ", "Checked ") + relativePast(it),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(end = 8.dp),
@@ -147,7 +148,7 @@ fun SeriesDetailScreen(
         if (series.recentChapters.isEmpty()) {
             item(key = "no-chapters") {
                 Text(
-                    "Aucun chapitre trouvé pour l'instant.",
+                    tr("Aucun chapitre trouvé pour l'instant.", "No chapters found yet."),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp),
@@ -169,8 +170,8 @@ fun SeriesDetailScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                 ) {
                     Text(
-                        if (showOldRead) "Masquer les chapitres déjà lus"
-                        else "Voir les ${hidden.size} chapitres lus plus anciens"
+                        if (showOldRead) tr("Masquer les chapitres déjà lus", "Hide chapters already read")
+                        else tr("Voir les ${hidden.size} chapitres lus plus anciens", "Show ${hidden.size} older read chapters")
                     )
                 }
             }
@@ -215,7 +216,7 @@ private fun Hero(series: FollowedSeries, onBack: () -> Unit) {
                 listOfNotNull(
                     series.sourceLabel,
                     series.status?.let { statusLabel(it).replaceFirstChar { c -> c.uppercase() } },
-                    "Rangée dans les terminées".takeIf { series.done },
+                    tr("Rangée dans les terminées", "Moved to finished").takeIf { series.done },
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -229,7 +230,7 @@ private fun Hero(series: FollowedSeries, onBack: () -> Unit) {
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
             ),
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Retour", "Back"))
         }
     }
 }
@@ -247,7 +248,7 @@ private fun NextReleaseCard(series: FollowedSeries, modifier: Modifier = Modifie
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("PROCHAIN CHAPITRE", style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.7f))
+        Text(tr("PROCHAIN CHAPITRE", "NEXT CHAPTER"), style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.7f))
         if (next != null) {
             val date = next.localDate()
             Row(verticalAlignment = Alignment.Bottom) {
@@ -261,14 +262,15 @@ private fun NextReleaseCard(series: FollowedSeries, modifier: Modifier = Modifie
             }
             Text(longDate(date), style = MaterialTheme.typography.bodyMedium, color = content.copy(alpha = 0.85f))
             Text(
-                "Estimé d'après le rythme " + (rhythm(series.intervalDays) ?: "des dernières sorties"),
+                rhythm(series.intervalDays)?.let { tr("Estimé d'après le rythme $it", "Estimated from its release pace ($it)") }
+                    ?: tr("Estimé d'après le rythme des dernières sorties", "Estimated from recent releases"),
                 style = MaterialTheme.typography.bodySmall,
                 color = content.copy(alpha = 0.65f),
             )
         } else {
             Text(unknownReason(series), style = MaterialTheme.typography.titleMedium, color = content)
             Text(
-                "Tu seras quand même prévenu dès qu'un nouveau chapitre sort.",
+                tr("Tu seras quand même prévenu dès qu'un nouveau chapitre sort.", "You will still be notified as soon as a new chapter is out."),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant,
             )
@@ -326,7 +328,7 @@ private fun ReadToggle(read: Boolean, onToggle: () -> Unit) {
             Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .semantics { contentDescription = if (read) "Lu, appuyer pour marquer non lu" else "Marquer comme lu" }
+                .semantics { contentDescription = if (read) tr("Lu, appuyer pour marquer non lu", "Read, tap to mark unread") else tr("Marquer comme lu", "Mark as read") }
                 .then(
                     if (read) Modifier.background(colors.primary)
                     else Modifier.border(2.dp, colors.outline, CircleShape)

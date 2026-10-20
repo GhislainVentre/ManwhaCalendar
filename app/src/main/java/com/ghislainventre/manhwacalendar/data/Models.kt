@@ -1,5 +1,6 @@
 package com.ghislainventre.manhwacalendar.data
 
+import com.ghislainventre.manhwacalendar.tr
 import java.time.Instant
 
 /** Origine des chapitres : l'API MangaDex, ou un site web de lecture (thème WordPress « Madara »). */
@@ -132,8 +133,11 @@ data class FollowedSeries(
 /** Un nouveau chapitre détecté lors d'une vérification. */
 data class NewChapterEvent(val series: FollowedSeries, val chapter: Chapter)
 
-enum class ChapterLanguage(val codes: List<String>, val label: String) {
-    FR(listOf("fr"), "Français"),
-    EN(listOf("en"), "Anglais"),
-    FR_EN(listOf("fr", "en"), "Français + anglais"),
+enum class ChapterLanguage(val codes: List<String>, private val fr: String, private val en: String) {
+    FR(listOf("fr"), "Français", "French"),
+    EN(listOf("en"), "Anglais", "English"),
+    FR_EN(listOf("fr", "en"), "Français + anglais", "French + English"),
+    ;
+
+    val label: String get() = tr(fr, en)
 }

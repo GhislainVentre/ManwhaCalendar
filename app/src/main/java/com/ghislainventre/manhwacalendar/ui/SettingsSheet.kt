@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import com.ghislainventre.manhwacalendar.data.ChapterLanguage
+import com.ghislainventre.manhwacalendar.tr
 import com.ghislainventre.manhwacalendar.update.AppUpdater
 
 /** Réglages regroupés dans une feuille : appli (version, retour), langue des chapitres et sites de recherche. */
@@ -69,28 +70,31 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             item(key = "title") {
                 Text(
-                    "Réglages",
+                    tr("Réglages", "Settings"),
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
                 )
             }
 
             item(key = "app") {
-                SheetSection("Application", "Version $versionName")
+                SheetSection(tr("Application", "App"), "Version $versionName")
                 Row(
                     Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     FilledTonalButton(onClick = { vm.checkForUpdate(userInitiated = true) }) {
-                        Text("Mises à jour")
+                        Text(tr("Mises à jour", "Updates"))
                     }
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { showFeedback = true }) { Text("Envoyer un retour") }
+                    OutlinedButton(onClick = { showFeedback = true }) { Text(tr("Envoyer un retour", "Send feedback")) }
                 }
             }
 
             item(key = "language-title") {
-                SheetSection("Langue des chapitres", "En français seulement, les sites français passent avant les sites anglais")
+                SheetSection(
+                    tr("Langue des chapitres", "Chapter language"),
+                    tr("En français seulement, les sites français passent avant les sites anglais", "With French only, French sites come before English ones"),
+                )
             }
             items(ChapterLanguage.entries, key = { it.name }) { lang ->
                 Row(
@@ -106,7 +110,7 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
             }
 
             item(key = "sites-title") {
-                SheetSection("Sites de recherche", "Les sites activés sont interrogés en même temps")
+                SheetSection(tr("Sites de recherche", "Search sites"), tr("Les sites activés sont interrogés en même temps", "Enabled sites are searched at the same time"))
             }
             items(sites, key = { "site-${it.name}" }) { site ->
                 Row(
@@ -125,7 +129,7 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                         IconButton(onClick = { vm.removeSite(site.name) }) {
                             Icon(
                                 Icons.Default.Delete,
-                                contentDescription = "Retirer ${site.name}",
+                                contentDescription = tr("Retirer ", "Remove ") + site.name,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -142,9 +146,9 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
-                        label = { Text("Ajouter un site") },
-                        placeholder = { Text("exemple.com") },
-                        supportingText = { Text("Sites WordPress (thèmes Madara ou MangaReader)") },
+                        label = { Text(tr("Ajouter un site", "Add a site")) },
+                        placeholder = { Text(tr("exemple.com", "example.com")) },
+                        supportingText = { Text(tr("Sites WordPress (thèmes Madara ou MangaReader)", "WordPress sites (Madara or MangaReader theme)")) },
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
@@ -152,7 +156,7 @@ fun SettingsSheet(vm: MainViewModel, onDismiss: () -> Unit) {
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(Modifier.width(8.dp))
-                    FilledTonalButton(onClick = addSite, enabled = address.isNotBlank()) { Text("Ajouter") }
+                    FilledTonalButton(onClick = addSite, enabled = address.isNotBlank()) { Text(tr("Ajouter", "Add")) }
                 }
             }
         }

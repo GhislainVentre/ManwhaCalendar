@@ -1,5 +1,7 @@
 package com.ghislainventre.manhwacalendar.data
 
+import com.ghislainventre.manhwacalendar.isFrenchUi
+import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -121,11 +123,12 @@ class MangaDexApi {
     private fun pickTitle(attrs: JSONObject): String {
         val titles = attrs.optJSONObject("title") ?: JSONObject()
         val alt = attrs.optJSONArray("altTitles")?.objects().orEmpty()
-        for (lang in listOf("fr", "en")) {
+        // Le titre dans la langue du téléphone : un lecteur anglais ne reconnaît pas le titre français.
+        for (lang in if (isFrenchUi) listOf("fr", "en") else listOf("en")) {
             titles.optStringOrNull(lang)?.let { return it }
             alt.firstNotNullOfOrNull { it.optStringOrNull(lang) }?.let { return it }
         }
-        return titles.keys().asSequence().firstNotNullOfOrNull { titles.optStringOrNull(it) } ?: "Sans titre"
+        return titles.keys().asSequence().firstNotNullOfOrNull { titles.optStringOrNull(it) } ?: tr("Sans titre", "Untitled")
     }
 
     private fun parseChapter(obj: JSONObject): Chapter? {
@@ -151,7 +154,7 @@ class MangaDexApi {
                 connection.setRequestProperty("User-Agent", USER_AGENT)
                 connection.setRequestProperty("Accept", "application/json")
                 val code = connection.responseCode
-                if (code !in 200..299) throw IOException("MangaDex a répondu $code")
+                if (code !in 200..299) throw IOException(tr("MangaDex a répondu $code", "MangaDex returned $code"))
                 JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
             } finally {
                 connection.disconnect()
