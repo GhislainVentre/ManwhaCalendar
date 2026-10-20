@@ -3,6 +3,7 @@ package com.ghislainventre.manhwacalendar.data
 import com.ghislainventre.manhwacalendar.isFrenchUi
 import com.ghislainventre.manhwacalendar.tr
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -136,27 +137,54 @@ class MangaDexApi {
             number = attrs.optStringOrNull("chapter"),
             title = attrs.optStringOrNull("title")?.takeIf { it.isNotBlank() },
             language = attrs.optString("translatedLanguage"),
-            readableAt = OffsetDateTime.parse(date).toInstant(),
+            // Une date mal formée ne doit pas faire échouer toute la liste : le chapitre est ignoré.
+            readableAt = runCatching { OffsetDateTime.parse(date).toInstant() }.getOrNull() ?: return null,
             externalUrl = attrs.optStringOrNull("externalUrl"),
         )
     }
 
-    private suspend fun get(path: String, params: List<Pair<String, String>>): JSONObject =
-        withContext(Dispatchers.IO) {
-            val query = params.joinToString("&") { (k, v) -> "${encode(k)}=${encode(v)}" }
-            val connection = URL("$BASE_URL$path?$query").openConnection() as HttpURLConnection
-            try {
-                connection.connectTimeout = 15_000
-                connection.readTimeout = 20_000
-                connection.setRequestProperty("User-Agent", USER_AGENT)
-                connection.setRequestProperty("Accept", "application/json")
-                val code = connection.responseCode
-                if (code !in 200..299) throw IOException(tr("MangaDex a répondu $code", "MangaDex returned $code"))
-                JSONObject(connection.inputStream.bufferedReader().use { it.readText() })
-            } finally {
-                connection.disconnect()
+    /**
+     * Une requête ; si MangaDex limite le débit (429) ou est momentanément indisponible (503),
+     * une seconde tentative après la pause qu'il demande.
+     */
+    private suspend fun get(path: String, params: List<Pair<String, String>>): JSONObject {
+        val query = params.joinToString("&") { (k, v) -> "${encode(k)}=${encode(v)}" }
+        val url = "$BASE_URL$path?$query"
+        repeat(MAX_ATTEMPTS - 1) {
+            when (val response = request(url)) {
+                is Response.Ok -> return response.json
+                is Response.RetryAfter -> delay(response.ms)
             }
         }
+        return when (val response = request(url)) {
+            is Response.Ok -> response.json
+            is Response.RetryAfter -> throw IOException(tr("MangaDex est surchargé, réessaie plus tard", "MangaDex is overloaded, try again later"))
+        }
+    }
+
+    private sealed interface Response {
+        class Ok(val json: JSONObject) : Response
+        class RetryAfter(val ms: Long) : Response
+    }
+
+    private suspend fun request(url: String): Response = withContext(Dispatchers.IO) {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.setRequestProperty("User-Agent", USER_AGENT)
+            connection.setRequestProperty("Accept", "application/json")
+            when (val code = connection.responseCode) {
+                in 200..299 -> Response.Ok(JSONObject(connection.inputStream.bufferedReader().use { it.readText() }))
+                429, 503 -> Response.RetryAfter(
+                    (connection.getHeaderField("Retry-After")?.trim()?.toLongOrNull() ?: 2L).coerceIn(1L, 10L) * 1_000
+                )
+                else -> throw IOException(tr("MangaDex a répondu $code", "MangaDex returned $code"))
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
 
     private fun encode(value: String) = URLEncoder.encode(value, "UTF-8")
 
@@ -164,6 +192,7 @@ class MangaDexApi {
         const val BASE_URL = "https://api.mangadex.org"
         const val USER_AGENT = "ManhwaCalendar/1.0 (Android)"
         const val FEED_PAGE = 500
+        const val MAX_ATTEMPTS = 2
     }
 }
 

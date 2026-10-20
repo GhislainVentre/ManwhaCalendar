@@ -30,6 +30,7 @@ class SeriesRepository(
     private val madara: MadaraSource = MadaraSource(WebPageScraper(context)),
 ) {
 
+    private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences("manhwa_calendar", Context.MODE_PRIVATE)
     private val refreshMutex = Mutex()
     /** Échecs de recherche consécutifs par site. */
@@ -69,6 +70,8 @@ class SeriesRepository(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
+        // Sans connexion, tous les sites échouent : ce n'est pas leur faute, on ne les désactive pas.
+        if (!Network.isOnline(appContext)) throw IOException(Network.noConnection, e)
         val failures = siteFailures.merge(site.name, 1) { a, b -> a + b } ?: 1
         if (failures >= MAX_SITE_FAILURES) {
             siteFailures.remove(site.name)
@@ -89,12 +92,14 @@ class SeriesRepository(
     fun addSite(address: String): Boolean {
         val url = address.trim().let { if (it.startsWith("http")) it else "https://$it" }.trimEnd('/')
         val host = runCatching { java.net.URI(url).host }.getOrNull()?.removePrefix("www.") ?: return false
-        if (!host.contains('.') || _sites.value.any { it.baseUrl.equals(url, ignoreCase = true) }) return false
+        if (!host.contains('.') || _sites.value.any { hostOf(it.baseUrl).equals(host, ignoreCase = true) }) return false
         val short = host.substringBefore('.').replaceFirstChar { it.uppercase() }
-        val name = if (_sites.value.any { it.name == short }) host else short
+        val name = if (_sites.value.any { it.name.equals(short, ignoreCase = true) }) host else short
         saveSites(_sites.value + Site(name, url))
         return true
     }
+
+    private fun hostOf(url: String) = runCatching { java.net.URI(url).host }.getOrNull()?.removePrefix("www.").orEmpty()
 
     fun removeSite(name: String) = saveSites(_sites.value.filterNot { it.name == name })
 
@@ -190,10 +195,10 @@ class SeriesRepository(
                 }
             }.awaitAll()
         }
-        val events = outcomes.mapNotNull { it.getOrNull() }
-        val lastError = outcomes.lastOrNull { it.isFailure }?.exceptionOrNull()
-        if (events.isEmpty() && lastError != null) throw lastError
-        events
+        // Une série en panne (site mort) ne doit pas faire passer toute la vérification pour un échec :
+        // on ne signale une erreur que si aucune série n'a pu être vérifiée.
+        if (outcomes.isNotEmpty() && outcomes.all { it.isFailure }) throw outcomes.last().exceptionOrNull()!!
+        outcomes.mapNotNull { it.getOrNull() }
     }
 
     private suspend fun refreshOne(series: FollowedSeries, notifyNew: Boolean): NewChapterEvent? {
@@ -239,28 +244,36 @@ class SeriesRepository(
         val isNew = previous != null && latest != null && latest.id != previous.id &&
             (if (latestN != null && previousN != null) latestN > previousN else !latest.readableAt.isBefore(previous.readableAt))
 
-        val current = _followed.value.firstOrNull { it.id == series.id } ?: return null
-        val updated = current.copy(
-            title = fetched.title ?: series.title,
-            source = if (fetched.web != null) Source.WEB else series.source,
-            pageUrl = fetched.web?.pageUrl ?: fetched.mirror?.url ?: series.pageUrl,
-            siteName = fetched.web?.site?.name ?: fetched.mirror?.siteName ?: series.siteName,
-            alternates = when {
-                fetched.web != null -> fetched.web.alternates
-                // Le site en panne passe en dernier secours : il reviendra peut-être.
-                fetched.mirror != null -> current.alternates - fetched.mirror + Mirror(series.sourceLabel, series.url)
-                else -> current.alternates
-            },
-            coverUrl = fetched.coverUrl ?: series.coverUrl,
-            status = status,
-            recentChapters = sorted.distinctBy { it.number ?: it.id }.take(MAX_STORED_CHAPTERS),
-            nextEstimate = estimate.next,
-            intervalDays = estimate.intervalDays,
-            lastCheckedAt = Instant.now(),
-            hasNew = series.hasNew || isNew,
-        )
-        mutate { list -> list.map { if (it.id == series.id) updated else it } }
-        return if (isNew && notifyNew) NewChapterEvent(updated, latest!!) else null
+        // La fiche est reconstruite à partir de son état actuel, pas de celui du début de la vérification :
+        // un chapitre coché lu ou une nouveauté vue pendant ce temps ne doit pas être annulé.
+        var updated: FollowedSeries? = null
+        mutate { list ->
+            list.map { current ->
+                if (current.id != series.id) return@map current
+                current.copy(
+                    title = fetched.title ?: current.title,
+                    source = if (fetched.web != null) Source.WEB else series.source,
+                    pageUrl = fetched.web?.pageUrl ?: fetched.mirror?.url ?: series.pageUrl,
+                    siteName = fetched.web?.site?.name ?: fetched.mirror?.siteName ?: series.siteName,
+                    alternates = when {
+                        fetched.web != null -> fetched.web.alternates
+                        // Le site en panne passe en dernier secours : il reviendra peut-être.
+                        fetched.mirror != null -> current.alternates - fetched.mirror + Mirror(series.sourceLabel, series.url)
+                        else -> current.alternates
+                    },
+                    coverUrl = fetched.coverUrl ?: series.coverUrl,
+                    status = status,
+                    // Identifiants uniques : la liste de la fiche s'en sert comme clés.
+                    recentChapters = sorted.distinctBy { it.number ?: it.id }.distinctBy { it.id }.take(MAX_STORED_CHAPTERS),
+                    nextEstimate = estimate.next,
+                    intervalDays = estimate.intervalDays,
+                    lastCheckedAt = Instant.now(),
+                    hasNew = current.hasNew || isNew,
+                ).also { updated = it }
+            }
+        }
+        val saved = updated ?: return null // retirée pendant la vérification
+        return if (isNew && notifyNew) NewChapterEvent(saved, latest!!) else null
     }
 
     private class Fetched(
@@ -360,6 +373,8 @@ class SeriesRepository(
         emptyList()
     }
 
+    /** Modifie la liste et l'enregistre d'un seul tenant : deux modifications simultanées s'enregistrent dans l'ordre. */
+    @Synchronized
     private fun mutate(transform: (List<FollowedSeries>) -> List<FollowedSeries>) {
         _followed.update(transform)
         save(_followed.value)
@@ -373,23 +388,24 @@ class SeriesRepository(
     /** Dernière liste de chapitres enregistrée pour chaque série. */
     private val savedChapters = mutableMapOf<String, List<Chapter>>()
 
-    private fun load(): List<FollowedSeries> = runCatching {
-        JSONArray(prefs.getString(KEY_FOLLOWED, "[]")).objects().map { json ->
-            // Les anciennes versions gardaient les chapitres dans la fiche de la série.
-            val chapters = json.optJSONArray("chapters")
-                ?: prefs.getString(chaptersKey(json.getString("id")), null)?.let(::JSONArray)
-            json.toSeries(chapters)
+    private fun load(): List<FollowedSeries> {
+        val raw = prefs.getString(KEY_FOLLOWED, null) ?: return emptyList()
+        return try {
+            SeriesCodec.decodeList(raw) { id -> prefs.getString(chaptersKey(id), null) }
+        } catch (e: Exception) {
+            // Liste illisible : on la met de côté avant qu'un enregistrement ne l'écrase.
+            prefs.edit().putString(KEY_FOLLOWED_BACKUP, raw).apply()
+            emptyList()
         }
-    }.getOrDefault(emptyList())
+    }
 
-    @Synchronized
     private fun save(list: List<FollowedSeries>) {
         val edit = prefs.edit()
         val array = JSONArray()
         list.forEach { series ->
-            array.put(series.toJson())
+            array.put(SeriesCodec.encodeSeries(series))
             if (savedChapters[series.id] !== series.recentChapters) {
-                edit.putString(chaptersKey(series.id), series.recentChapters.toJson().toString())
+                edit.putString(chaptersKey(series.id), SeriesCodec.encodeChapters(series.recentChapters).toString())
                 savedChapters[series.id] = series.recentChapters
             }
         }
@@ -401,73 +417,6 @@ class SeriesRepository(
     }
 
     private fun chaptersKey(seriesId: String) = CHAPTERS_PREFIX + seriesId
-
-    private fun List<Chapter>.toJson() = JSONArray().apply {
-        forEach { c ->
-            put(JSONObject().apply {
-                put("id", c.id)
-                putOpt("number", c.number)
-                putOpt("title", c.title)
-                put("language", c.language)
-                put("readableAt", c.readableAt.toEpochMilli())
-                // Sur les sites web, l'adresse est déjà l'identifiant.
-                if (c.externalUrl != c.id) putOpt("externalUrl", c.externalUrl)
-            })
-        }
-    }
-
-    private fun FollowedSeries.toJson() = JSONObject().apply {
-        put("id", id)
-        put("title", title)
-        putOpt("coverUrl", coverUrl)
-        putOpt("status", status)
-        putOpt("nextEstimate", nextEstimate?.toEpochMilli())
-        putOpt("intervalDays", intervalDays)
-        putOpt("lastCheckedAt", lastCheckedAt?.toEpochMilli())
-        put("hasNew", hasNew)
-        put("source", source.name)
-        putOpt("pageUrl", pageUrl)
-        putOpt("siteName", siteName)
-        putOpt("lastReadNumber", lastReadNumber)
-        putOpt("lastReadId", lastReadId)
-        if (done) put("done", true)
-        if (alternates.isNotEmpty()) {
-            put("alternates", JSONArray().apply {
-                alternates.forEach { put(JSONObject().put("site", it.siteName).put("url", it.url)) }
-            })
-        }
-    }
-
-    private fun JSONObject.toSeries(chapters: JSONArray?) = FollowedSeries(
-        id = getString("id"),
-        title = getString("title"),
-        coverUrl = optStringOrNull("coverUrl"),
-        status = optStringOrNull("status"),
-        recentChapters = chapters?.objects().orEmpty().map { c ->
-            Chapter(
-                id = c.getString("id"),
-                number = c.optStringOrNull("number"),
-                title = c.optStringOrNull("title"),
-                language = c.optString("language"),
-                readableAt = Instant.ofEpochMilli(c.getLong("readableAt")),
-                externalUrl = c.optStringOrNull("externalUrl") ?: c.getString("id").takeIf { it.startsWith("http") },
-            )
-        }.sortedWith(Chapter.NEWEST_FIRST),
-        nextEstimate = optEpoch("nextEstimate"),
-        intervalDays = if (has("intervalDays")) optDouble("intervalDays") else null,
-        lastCheckedAt = optEpoch("lastCheckedAt"),
-        hasNew = optBoolean("hasNew"),
-        source = when (optString("source")) {
-            "WEB", "TOONGOD" -> Source.WEB
-            else -> Source.MANGADEX
-        },
-        pageUrl = optStringOrNull("pageUrl"),
-        siteName = optStringOrNull("siteName") ?: if (optString("source") == "TOONGOD") "ToonGod" else null,
-        lastReadNumber = if (has("lastReadNumber")) optDouble("lastReadNumber") else null,
-        lastReadId = optStringOrNull("lastReadId"),
-        done = optBoolean("done"),
-        alternates = optJSONArray("alternates")?.objects().orEmpty().map { Mirror(it.getString("site"), it.getString("url")) },
-    )
 
     private fun loadSites(): List<Site> {
         val defaults = listOf(Site(MANGADEX_NAME, "https://mangadex.org")) + MadaraSource.DEFAULT_SITES
@@ -495,10 +444,9 @@ class SeriesRepository(
         prefs.edit().putString(KEY_SITES, array.toString()).putInt(KEY_SITES_VERSION, SITES_VERSION).apply()
     }
 
-    private fun JSONObject.optEpoch(key: String) = if (has(key)) Instant.ofEpochMilli(getLong(key)) else null
-
     private companion object {
         const val KEY_FOLLOWED = "followed"
+        const val KEY_FOLLOWED_BACKUP = "followed_unreadable"
         const val KEY_LANGUAGE = "language"
         const val CHAPTERS_PREFIX = "chapters_"
         const val WEB_LOOKUP_PREFIX = "web_lookup_"
