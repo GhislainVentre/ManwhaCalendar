@@ -17,6 +17,7 @@ import com.ghislainventre.manhwacalendar.data.RecommendationFilter
 import com.ghislainventre.manhwacalendar.data.SearchGrouping
 import com.ghislainventre.manhwacalendar.data.SeriesGroup
 import com.ghislainventre.manhwacalendar.tr
+import com.ghislainventre.manhwacalendar.update.AppRelease
 import com.ghislainventre.manhwacalendar.update.AppUpdater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -83,11 +84,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .filter { recommendationFilter.matches(it.manga, recommendationChapters[it.manga.id]) }
             .take(MAX_RECOMMENDATIONS)
 
-    /** versionCode d'une version plus récente publiée sur GitHub, tant qu'elle est proposée. */
-    var availableUpdate by mutableStateOf<Long?>(null)
+    /** Version plus récente publiée sur GitHub, tant qu'elle est proposée. */
+    var availableUpdate by mutableStateOf<AppRelease?>(null)
         private set
-    /** Avancement du téléchargement (0..1) pendant qu'il a lieu, sinon null. */
-    var updateProgress by mutableStateOf<Float?>(null)
+    var updateStep by mutableStateOf<UpdateStep>(UpdateStep.Idle)
         private set
     private val updatePrefs = application.getSharedPreferences("app_update", android.content.Context.MODE_PRIVATE)
 
@@ -293,9 +293,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!userInitiated && System.currentTimeMillis() < updatePrefs.getLong("snoozed_until", 0)) return
         viewModelScope.launch {
             try {
-                val latest = AppUpdater.latestVersionCode()
+                val latest = AppUpdater.latestRelease()
                 when {
-                    latest != null && latest > AppUpdater.installedVersionCode(app) -> availableUpdate = latest
+                    latest != null && latest.versionCode > AppUpdater.installedVersionCode(app) -> availableUpdate = latest
                     userInitiated -> message = UiMessage(tr("Tu as déjà la dernière version", "You already have the latest version"))
                 }
             } catch (e: CancellationException) {
@@ -307,25 +307,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun postponeUpdate() {
+        if (updateStep.busy) return
         availableUpdate = null
+        updateStep = UpdateStep.Idle
         updatePrefs.edit().putLong("snoozed_until", System.currentTimeMillis() + UPDATE_SNOOZE_HOURS * 3_600_000).apply()
     }
 
     fun installUpdate() {
-        if (updateProgress != null) return
+        if (availableUpdate == null || updateStep.busy) return
         val app = getApplication<Application>()
-        updateProgress = 0f
+        updateStep = UpdateStep.Downloading(null)
         viewModelScope.launch {
             try {
-                val apk = AppUpdater.download(app) { updateProgress = it }
-                availableUpdate = null
+                val apk = AppUpdater.download(app) { updateStep = UpdateStep.Downloading(it) }
+                updateStep = UpdateStep.Installing
                 AppUpdater.install(app, apk)
+                // Installation annulée et retour dans l'appli : la fenêtre reste ouverte pour réessayer.
+                updateStep = UpdateStep.Idle
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                message = UiMessage(tr("Téléchargement impossible : ", "Download failed: ") + Network.describe(e))
-            } finally {
-                updateProgress = null
+                updateStep = UpdateStep.Failed(tr("Téléchargement impossible : ", "Download failed: ") + Network.describe(e))
             }
         }
     }
@@ -345,3 +347,14 @@ data class SiteResult(
     val error: String? = null,
     val elapsedMs: Long = 0,
 )
+
+/** Où en est l'installation de la mise à jour proposée. */
+sealed interface UpdateStep {
+    val busy: Boolean get() = this is Downloading || this is Installing
+
+    data object Idle : UpdateStep
+    /** [progress] de 0 à 1, null tant que la taille n'est pas connue. */
+    data class Downloading(val progress: Float?) : UpdateStep
+    data object Installing : UpdateStep
+    data class Failed(val message: String) : UpdateStep
+}

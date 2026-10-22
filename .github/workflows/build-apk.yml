@@ -60,6 +60,17 @@ jobs:
           # L'appli lit ce numéro pour savoir si une version plus récente est publiée (même calcul que versionCode).
           echo $((GITHUB_RUN_NUMBER + 100)) > version.txt
 
+      # Fenêtre « Nouvelle version » de l'appli : numéro, taille et nouveautés (message du commit).
+      # L'historique des versions précédentes est repris de la release pour montrer tout ce qui a été sauté.
+      - name: Nouveautés de la version
+        run: |
+          git log -1 --pretty=%B > commit-message.txt
+          curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/release.json" -o previous-release.json \
+            || echo '{}' > previous-release.json
+          VERSION_CODE=$((GITHUB_RUN_NUMBER + 100)) VERSION_NAME="1.1.${GITHUB_RUN_NUMBER}" \
+            python3 .github/scripts/release_json.py commit-message.txt previous-release.json ManhwaCalendar.apk release.json
+          cat release.json
+
       - uses: actions/upload-artifact@v4
         with:
           name: ManhwaCalendar-apk
@@ -78,3 +89,4 @@ jobs:
           files: |
             ManhwaCalendar.apk
             version.txt
+            release.json

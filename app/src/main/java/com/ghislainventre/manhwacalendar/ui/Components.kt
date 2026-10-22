@@ -26,6 +26,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -155,10 +160,30 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier, trailing: @Composa
     }
 }
 
+/**
+ * Une seule roue pendant une vérification : celle du geste « tirer pour actualiser » si l'on vient de tirer,
+ * sinon celle du bouton d'en-tête (vérification au lancement, bouton, tâche automatique).
+ */
+class RefreshState(val refreshing: Boolean, private val pulled: Boolean, val onPull: () -> Unit) {
+    val pullSpinner: Boolean get() = refreshing && pulled
+    val buttonSpinner: Boolean get() = refreshing && !pulled
+}
+
 @Composable
-fun RefreshAction(refreshing: Boolean, onRefresh: () -> Unit) {
-    IconButton(onClick = onRefresh, enabled = !refreshing) {
-        if (refreshing) {
+fun rememberRefreshState(refreshing: Boolean, onRefresh: () -> Unit): RefreshState {
+    var pulled by remember { mutableStateOf(false) }
+    // Vérification finie, ou jamais lancée (hors ligne) : le prochain chargement repasse par le bouton.
+    LaunchedEffect(pulled, refreshing) { if (!refreshing) pulled = false }
+    return RefreshState(refreshing, pulled) {
+        pulled = true
+        onRefresh()
+    }
+}
+
+@Composable
+fun RefreshAction(state: RefreshState, onRefresh: () -> Unit) {
+    IconButton(onClick = onRefresh, enabled = !state.refreshing) {
+        if (state.buttonSpinner) {
             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         } else {
             Icon(Icons.Default.Refresh, contentDescription = tr("Vérifier les sorties", "Check for new chapters"))
