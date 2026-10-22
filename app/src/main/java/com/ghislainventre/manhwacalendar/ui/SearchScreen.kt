@@ -182,7 +182,7 @@ private fun LazyListScope.recommendationItems(vm: MainViewModel, followedIds: Se
                 )
             }
             if (!vm.recommendationsLoading && vm.recommendations.isNotEmpty()) {
-                RecommendationFilters(vm.recommendationFilter, vm.countingChapters, vm::setRecommendationFilter)
+                RecommendationFilters(vm.recommendationFilter, vm.countingChapters, vm::applyRecommendationFilter)
             }
         }
     }

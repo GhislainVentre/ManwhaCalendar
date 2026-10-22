@@ -197,7 +197,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setRecommendationFilter(filter: RecommendationFilter) {
+    fun applyRecommendationFilter(filter: RecommendationFilter) {
         recommendationFilter = filter
         if (filter.chapters != null) countChapters() else countingJob?.cancel()
     }
