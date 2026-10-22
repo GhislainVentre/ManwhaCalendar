@@ -1,9 +1,12 @@
 package com.ghislainventre.manhwacalendar.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,6 +30,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +48,10 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ghislainventre.manhwacalendar.data.ChapterRange
 import com.ghislainventre.manhwacalendar.data.MadaraSource
 import com.ghislainventre.manhwacalendar.data.MangaSummary
+import com.ghislainventre.manhwacalendar.data.RecommendationFilter
 import com.ghislainventre.manhwacalendar.data.Site
 import com.ghislainventre.manhwacalendar.data.Source
 import com.ghislainventre.manhwacalendar.data.TitleMatch
@@ -159,6 +166,8 @@ private fun LazyListScope.recommendationItems(vm: MainViewModel, followedIds: Se
                 vm.recommendationsLoading -> null
                 vm.recommendationsError != null -> tr("Suggestions indisponibles : ", "Suggestions unavailable: ") + vm.recommendationsError
                 vm.recommendations.isEmpty() -> tr("Pas de suggestion pour l'instant.", "No suggestions yet.")
+                vm.visibleRecommendations.isEmpty() && vm.countingChapters -> tr("Comptage des chapitres…", "Counting chapters…")
+                vm.visibleRecommendations.isEmpty() -> tr("Aucune suggestion ne correspond à ces filtres.", "No suggestions match these filters.")
                 else -> tr("D'après les genres de tes séries, parmi les manhwa les plus suivis sur MangaDex", "Based on your series' genres, among the most followed manhwa on MangaDex")
             }
             if (vm.recommendationsLoading) {
@@ -172,18 +181,74 @@ private fun LazyListScope.recommendationItems(vm: MainViewModel, followedIds: Se
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
                 )
             }
+            if (!vm.recommendationsLoading && vm.recommendations.isNotEmpty()) {
+                RecommendationFilters(vm.recommendationFilter, vm.countingChapters, vm::applyRecommendationFilter)
+            }
         }
     }
     if (!vm.recommendationsLoading) {
-        items(vm.recommendations, key = { "reco-${it.manga.id}" }) { reco ->
+        items(vm.visibleRecommendations, key = { "reco-${it.manga.id}" }) { reco ->
             SearchResultRow(
                 reco.manga,
                 followed = reco.manga.id in followedIds,
                 onFollow = { vm.follow(reco.manga) },
                 reason = tr("Comme tes séries : ", "Like your series: ") + reco.reasons.joinToString(", ") { tagLabel(it) },
+                chapterCount = vm.recommendationChapters[reco.manga.id],
             )
         }
     }
+}
+
+/** Puces de filtre de « Pour toi » : statut de la série, puis longueur. Toucher une puce active la retire. */
+@Composable
+private fun RecommendationFilters(filter: RecommendationFilter, counting: Boolean, onChange: (RecommendationFilter) -> Unit) {
+    Column(Modifier.padding(bottom = 8.dp)) {
+        FilterChipRow {
+            RecommendationFilter.STATUSES.forEach { status ->
+                val selected = status in filter.statuses
+                FilterChip(
+                    selected = selected,
+                    onClick = { onChange(filter.copy(statuses = if (selected) filter.statuses - status else filter.statuses + status)) },
+                    label = { Text(statusFilterLabel(status)) },
+                )
+            }
+        }
+        FilterChipRow {
+            ChapterRange.entries.forEach { range ->
+                val selected = filter.chapters == range
+                FilterChip(
+                    selected = selected,
+                    onClick = { onChange(filter.copy(chapters = if (selected) null else range)) },
+                    label = { Text(chapterRangeLabel(range)) },
+                )
+            }
+            if (counting) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChipRow(content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+private fun statusFilterLabel(status: String) = when (status) {
+    "ongoing" -> tr("En cours", "Ongoing")
+    "completed" -> tr("Terminées", "Completed")
+    "cancelled" -> tr("Annulées", "Cancelled")
+    else -> statusLabel(status)
+}
+
+private fun chapterRangeLabel(range: ChapterRange) = when (range.max) {
+    null -> tr("${range.min} chap. et +", "${range.min}+ ch.")
+    else -> if (range.min == 0) tr("Moins de ${range.max + 1} chap.", "Under ${range.max + 1} ch.") else tr("${range.min} à ${range.max} chap.", "${range.min}–${range.max} ch.")
 }
 
 /** Avancement de la recherche : combien de sites ont répondu, et combien sont en panne. */
@@ -216,7 +281,7 @@ private fun SearchProgress(results: List<SiteResult>, empty: Boolean) {
 }
 
 @Composable
-private fun SearchResultRow(manga: MangaSummary, followed: Boolean, onFollow: () -> Unit, reason: String? = null) {
+private fun SearchResultRow(manga: MangaSummary, followed: Boolean, onFollow: () -> Unit, reason: String? = null, chapterCount: Int? = null) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -235,7 +300,12 @@ private fun SearchResultRow(manga: MangaSummary, followed: Boolean, onFollow: ()
                 if (manga.source == Source.WEB) {
                     listOfNotNull(manga.latestChapter).joinToString(" · ")
                 } else {
-                    listOfNotNull(manga.year?.toString(), statusLabel(manga.status), manga.originalLanguage?.uppercase())
+                    listOfNotNull(
+                        manga.year?.toString(),
+                        statusLabel(manga.status),
+                        chapterCount?.let { tr("$it chap.", "$it ch.") },
+                        manga.originalLanguage?.uppercase(),
+                    )
                         .joinToString(" · ")
                 },
                 style = MaterialTheme.typography.bodySmall,

@@ -13,6 +13,7 @@ import com.ghislainventre.manhwacalendar.data.FollowedSeries
 import com.ghislainventre.manhwacalendar.data.MangaSummary
 import com.ghislainventre.manhwacalendar.data.Network
 import com.ghislainventre.manhwacalendar.data.Recommendation
+import com.ghislainventre.manhwacalendar.data.RecommendationFilter
 import com.ghislainventre.manhwacalendar.data.SearchGrouping
 import com.ghislainventre.manhwacalendar.data.SeriesGroup
 import com.ghislainventre.manhwacalendar.tr
@@ -20,6 +21,8 @@ import com.ghislainventre.manhwacalendar.update.AppRelease
 import com.ghislainventre.manhwacalendar.update.AppUpdater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
@@ -27,6 +30,9 @@ import java.time.Instant
 private const val STARTUP_REFRESH_AFTER_MIN = 60L
 /** Après « Plus tard », on ne repropose la mise à jour qu'au bout de ce délai. */
 private const val UPDATE_SNOOZE_HOURS = 24L
+/** Suggestions affichées au plus, et séries dont on compte les chapitres en même temps. */
+private const val MAX_RECOMMENDATIONS = 20
+private const val COUNT_BATCH = 3
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -63,6 +69,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     /** Séries suivies et langue au moment du dernier calcul : on ne recalcule que s'ils ont changé. */
     private var recommendationsKey: Set<String>? = null
+    var recommendationFilter by mutableStateOf(RecommendationFilter())
+        private set
+    /** Nombre de chapitres par série proposée ; une clé présente avec null : inconnu (aucun chapitre, ou erreur). */
+    var recommendationChapters by mutableStateOf<Map<String, Int?>>(emptyMap())
+        private set
+    var countingChapters by mutableStateOf(false)
+        private set
+    private var countingJob: Job? = null
+
+    /** Suggestions qui passent les filtres, dans l'ordre du classement. */
+    val visibleRecommendations: List<Recommendation>
+        get() = recommendations
+            .filter { recommendationFilter.matches(it.manga, recommendationChapters[it.manga.id]) }
+            .take(MAX_RECOMMENDATIONS)
 
     /** Version plus récente publiée sur GitHub, tant qu'elle est proposée. */
     var availableUpdate by mutableStateOf<AppRelease?>(null)
@@ -162,6 +182,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 recommendations = repository.recommendations()
+                // La langue a pu changer : les nombres de chapitres sont à recompter.
+                countingJob?.cancel()
+                recommendationChapters = emptyMap()
+                if (recommendationFilter.chapters != null) countChapters()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -169,6 +193,44 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 recommendationsKey = null
             } finally {
                 recommendationsLoading = false
+            }
+        }
+    }
+
+    fun applyRecommendationFilter(filter: RecommendationFilter) {
+        recommendationFilter = filter
+        if (filter.chapters != null) countChapters() else countingJob?.cancel()
+    }
+
+    /**
+     * Compte les chapitres des suggestions (une requête MangaDex par série), dans l'ordre du classement et
+     * par petits lots pour ménager MangaDex, jusqu'à avoir de quoi remplir la liste filtrée.
+     */
+    private fun countChapters() {
+        countingJob?.cancel()
+        countingJob = viewModelScope.launch {
+            countingChapters = true
+            try {
+                val pending = recommendations.map { it.manga }
+                    .filter { recommendationFilter.matchesStatus(it) && it.id !in recommendationChapters }
+                for (batch in pending.chunked(COUNT_BATCH)) {
+                    if (visibleRecommendations.size >= MAX_RECOMMENDATIONS) break
+                    val counts = batch.map { manga ->
+                        async {
+                            manga.id to try {
+                                repository.chapterCount(manga.id)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                null
+                            }
+                        }
+                    }.awaitAll()
+                    recommendationChapters = recommendationChapters + counts
+                }
+            } finally {
+                // Un comptage annulé pour en relancer un autre ne doit pas éteindre l'indicateur du nouveau.
+                if (countingJob === coroutineContext[Job]) countingChapters = false
             }
         }
     }

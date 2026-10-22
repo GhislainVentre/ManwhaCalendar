@@ -72,6 +72,13 @@ class MangaDexApi {
     }
 
     /**
+     * Nombre de chapitres traduits dans l'une des [languages] : le plus grand numéro (les traductions ont souvent
+     * des trous), ou à défaut le nombre de chapitres distincts. Null si la série n'en a aucun.
+     */
+    suspend fun chapterCount(mangaId: String, languages: List<String>): Int? =
+        aggregateChapterCount(get("/manga/$mangaId/aggregate", languages.map { "translatedLanguage[]" to it }))
+
+    /**
      * Tous les chapitres traduits (jusqu'à [max]), du plus récent au plus ancien, par pages de 500 :
      * il faut toute la liste pour qui commence une série.
      */
@@ -197,6 +204,20 @@ class MangaDexApi {
         const val FEED_PAGE = 500
         const val MAX_ATTEMPTS = 2
     }
+}
+
+/** Lecture de la réponse de /manga/{id}/aggregate pour [MangaDexApi.chapterCount]. */
+internal fun aggregateChapterCount(json: JSONObject): Int? {
+    // Sans chapitre, MangaDex renvoie « volumes » sous forme de tableau vide au lieu d'un objet.
+    val volumes = json.optJSONObject("volumes") ?: return null
+    val numbers = volumes.keys().asSequence()
+        .mapNotNull { volumes.optJSONObject(it)?.optJSONObject("chapters") }
+        .flatMap { it.keys().asSequence() }
+        .filter { it != "none" }
+        .toSet()
+    if (numbers.isEmpty()) return null
+    val highest = numbers.mapNotNull { it.toDoubleOrNull() }.maxOrNull()?.toInt() ?: 0
+    return maxOf(highest, numbers.size)
 }
 
 internal fun JSONArray.objects(): List<JSONObject> = (0 until length()).mapNotNull { optJSONObject(it) }
