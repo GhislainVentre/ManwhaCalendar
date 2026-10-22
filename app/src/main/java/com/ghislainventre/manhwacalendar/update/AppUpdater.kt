@@ -14,12 +14,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Mises à jour depuis la release « latest » de GitHub : le build publie l'APK et un version.txt
- * qui contient son versionCode. L'appli compare ce numéro au sien, télécharge l'APK puis ouvre
- * l'installeur d'Android (les séries suivies sont conservées, la clé de signature ne change pas).
+ * Mises à jour depuis la release « latest » de GitHub : le build publie l'APK et un release.json
+ * (versionCode, nom, taille, nouveautés des dernières versions). L'appli compare ce numéro au sien,
+ * télécharge l'APK puis ouvre l'installeur d'Android (les séries suivies sont conservées, la clé de
+ * signature ne change pas). version.txt reste publié pour les versions qui ne lisent que lui.
  */
 object AppUpdater {
     private const val RELEASE_URL = "https://github.com/GhislainVentre/ManwhaCalendar/releases/download/latest"
+    private const val RELEASE_JSON_URL = "$RELEASE_URL/release.json"
     private const val VERSION_URL = "$RELEASE_URL/version.txt"
     private const val APK_URL = "$RELEASE_URL/ManhwaCalendar.apk"
 
@@ -29,12 +31,18 @@ object AppUpdater {
     fun installedVersionName(context: Context): String =
         context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
 
-    /** versionCode de la dernière version publiée, ou null si le fichier est absent ou illisible. */
-    suspend fun latestVersionCode(): Long? = withContext(Dispatchers.IO) {
-        val connection = open(VERSION_URL)
+    /** Dernière version publiée, ou null si rien n'est lisible. Sans release.json, seul le numéro est connu. */
+    suspend fun latestRelease(): AppRelease? = withContext(Dispatchers.IO) {
+        readText(RELEASE_JSON_URL)?.let(AppRelease::parse)
+            ?: readText(VERSION_URL)?.trim()?.toLongOrNull()?.let { AppRelease(it, versionName = null, sizeBytes = null) }
+    }
+
+    /** Contenu du fichier, ou null s'il n'est pas publié. */
+    private fun readText(url: String): String? {
+        val connection = open(url)
         try {
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) return@withContext null
-            connection.inputStream.bufferedReader().use { it.readText() }.trim().toLongOrNull()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
+            return connection.inputStream.bufferedReader().use { it.readText() }
         } finally {
             connection.disconnect()
         }
