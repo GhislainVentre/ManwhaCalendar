@@ -43,3 +43,32 @@ object Recommender {
             .map { it.second }
     }
 }
+
+/** Tranche de longueur d'une série, en chapitres traduits ([max] inclus ; null : sans limite). */
+enum class ChapterRange(val min: Int, val max: Int?) {
+    SHORT(0, 49),
+    MEDIUM(50, 99),
+    LONG(100, 199),
+    VERY_LONG(200, null),
+    ;
+
+    operator fun contains(count: Int) = count >= min && (max == null || count <= max)
+}
+
+/**
+ * Filtres de « Pour toi » : statuts MangaDex acceptés (vide : tous) et longueur voulue (null : toutes).
+ * Une série dont on ne connaît pas encore le nombre de chapitres est écartée tant qu'une longueur est demandée.
+ */
+data class RecommendationFilter(val statuses: Set<String> = emptySet(), val chapters: ChapterRange? = null) {
+    val isActive: Boolean get() = statuses.isNotEmpty() || chapters != null
+
+    fun matchesStatus(manga: MangaSummary) = statuses.isEmpty() || manga.status in statuses
+
+    fun matches(manga: MangaSummary, chapterCount: Int?): Boolean =
+        matchesStatus(manga) && (chapters == null || (chapterCount != null && chapterCount in chapters))
+
+    companion object {
+        /** Statuts proposés, dans l'ordre des puces. */
+        val STATUSES = listOf("ongoing", "completed", "cancelled")
+    }
+}

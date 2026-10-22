@@ -126,8 +126,12 @@ class SeriesRepository(
         if (top.isEmpty()) return emptyList()
         val candidates = api.popularWithTags(top.map { it.id }, _language.value.codes)
         val exclude = followed.map { it.id }.toSet() + liked.map { it.id }
-        return Recommender.rank(candidates, profile, exclude)
+        // Tout le classement : les filtres de l'écran piochent dedans sans nouvelle requête.
+        return Recommender.rank(candidates, profile, exclude, max = candidates.size)
     }
+
+    /** Nombre de chapitres de [mangaId] dans la langue choisie, pour filtrer « Pour toi » par longueur. */
+    suspend fun chapterCount(mangaId: String): Int? = api.chapterCount(mangaId, _language.value.codes)
 
     /** Suit [manga] ; [alternates] : la même série sur d'autres sites, utilisés si celui-ci ne répond plus. */
     suspend fun follow(manga: MangaSummary, alternates: List<MangaSummary> = emptyList()) {
