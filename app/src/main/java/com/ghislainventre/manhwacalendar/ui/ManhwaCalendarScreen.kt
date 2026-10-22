@@ -96,7 +96,7 @@ fun ManhwaCalendarScreen(vm: MainViewModel = viewModel()) {
     }
 
     if (showSettings) SettingsSheet(vm) { showSettings = false }
-    if (vm.availableUpdate != null || vm.updateProgress != null) UpdateDialog(vm)
+    vm.availableUpdate?.let { UpdateDialog(vm, it) }
 
     val selected = followed.firstOrNull { it.id == selectedId }
     BackHandler(enabled = selected != null) { selectedId = null }
