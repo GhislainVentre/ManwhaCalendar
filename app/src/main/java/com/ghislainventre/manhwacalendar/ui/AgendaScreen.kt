@@ -85,9 +85,10 @@ fun AgendaScreen(
     var index = 2 + (if (mine.isNotEmpty()) 2 else 0) + (if (byDay.isNotEmpty()) 1 else 0)
     val dayIndex = byDay.keys.associateWith { index++ }
 
+    val refreshState = rememberRefreshState(refreshing, onRefresh)
     PullToRefreshBox(
-        isRefreshing = refreshing,
-        onRefresh = onRefresh,
+        isRefreshing = refreshState.pullSpinner,
+        onRefresh = refreshState.onPull,
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
     ) {
         LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(bottom = 24.dp)) {
@@ -100,7 +101,7 @@ fun AgendaScreen(
                         else -> plural(thisWeek, tr("sortie prévue", "release due"), tr("sorties prévues", "releases due")) + tr(" cette semaine", " this week")
                     },
                 ) {
-                    RefreshAction(refreshing, onRefresh)
+                    RefreshAction(refreshState, onRefresh)
                     SettingsAction(onSettings)
                 }
             }
