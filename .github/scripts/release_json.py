@@ -16,7 +16,12 @@ TRAILERS = re.compile(r"^(Co-Authored-By|Claude-Session|Signed-off-by):", re.IGN
 def notes_from_message(message):
     """Titre (sans « (#28) ») et corps du commit, lignes coupées à 72 colonnes recollées."""
     lines = [line.rstrip() for line in message.splitlines() if not TRAILERS.match(line.strip())]
-    lines = [line for line in lines if not line.startswith(("Merge pull request", "Merge branch"))]
+    # Lignes techniques possibles quand le message vient de la description de la PR.
+    lines = [
+        line
+        for line in lines
+        if not line.strip().startswith(("Merge pull request", "Merge branch", "<!--", "_Requested by", "🤖", "https://claude.ai/"))
+    ]
     while lines and not lines[0].strip():
         lines.pop(0)
     if not lines:
