@@ -56,9 +56,10 @@ fun LibraryScreen(
     val sorted = current.sortedWith(compareByDescending<FollowedSeries> { it.hasNew }.thenBy { it.title.lowercase() })
     val newCount = followed.count { it.hasNew }
 
+    val refreshState = rememberRefreshState(refreshing, onRefresh)
     PullToRefreshBox(
-        isRefreshing = refreshing,
-        onRefresh = onRefresh,
+        isRefreshing = refreshState.pullSpinner,
+        onRefresh = refreshState.onPull,
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
     ) {
         LazyVerticalGrid(
@@ -80,7 +81,7 @@ fun LibraryScreen(
                     start = 4.dp,
                     end = 0.dp,
                 ) {
-                    RefreshAction(refreshing, onRefresh)
+                    RefreshAction(refreshState, onRefresh)
                     SettingsAction(onSettings)
                 }
             }
